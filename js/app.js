@@ -51,12 +51,10 @@
         
         generateBarcode(format = 'EAN13') {
             if (format === 'EAN13') {
-                // Генерация случайного штрихкода EAN-13
                 let code = '';
                 for (let i = 0; i < 12; i++) {
                     code += Math.floor(Math.random() * 10);
                 }
-                // Вычисление контрольной цифры
                 let sum = 0;
                 for (let i = 0; i < 12; i++) {
                     sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
@@ -64,7 +62,6 @@
                 const checkDigit = (10 - (sum % 10)) % 10;
                 return code + checkDigit;
             } else {
-                // CODE128 - генерируем случайный числовой код
                 let code = '';
                 for (let i = 0; i < 12; i++) {
                     code += Math.floor(Math.random() * 10);
@@ -74,27 +71,17 @@
         },
         
         detectBarcodeFormat(barcode) {
-            // Удаляем все нецифровые символы для проверки
             const cleanBarcode = barcode.replace(/\D/g, '');
             
-            // EAN13 - ровно 13 цифр
             if (cleanBarcode.length === 13) {
                 return 'EAN13';
-            }
-            // EAN8 - ровно 8 цифр
-            else if (cleanBarcode.length === 8) {
+            } else if (cleanBarcode.length === 8) {
                 return 'EAN8';
-            }
-            // UPC - 12 цифр
-            else if (cleanBarcode.length === 12) {
+            } else if (cleanBarcode.length === 12) {
                 return 'UPC';
-            }
-            // CODE39 - может содержать буквы и цифры, начинается и заканчивается *
-            else if (barcode.startsWith('*') && barcode.endsWith('*') && barcode.length > 2) {
+            } else if (barcode.startsWith('*') && barcode.endsWith('*') && barcode.length > 2) {
                 return 'CODE39';
-            }
-            // По умолчанию CODE128
-            else {
+            } else {
                 return 'CODE128';
             }
         },
@@ -109,7 +96,6 @@
             navigator.clipboard.writeText(text).then(() => {
                 this.showToast('Скопировано в буфер обмена');
             }).catch(() => {
-                // Fallback для старых браузеров
                 const textarea = document.createElement('textarea');
                 textarea.value = text;
                 document.body.appendChild(textarea);
@@ -166,7 +152,6 @@
                 document.getElementById('auth-screen').classList.remove('hidden');
             }
             
-            // Переключение вкладок
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
@@ -179,19 +164,16 @@
                 });
             });
             
-            // Форма входа
             document.getElementById('login-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.login();
             });
             
-            // Форма регистрации
             document.getElementById('register-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.register();
             });
             
-            // Кнопка выхода
             document.getElementById('btn-logout').addEventListener('click', () => {
                 this.logout();
             });
@@ -258,230 +240,228 @@
         }
     };
 
-// ==================== ГЕНЕРАЦИЯ PDF ====================
-const PDFGenerator = {
-    async generateLabelsPDF(labels, settings) {
-        const { jsPDF } = window.jspdf;
-        
-        // Создаем PDF с поддержкой кириллицы
-        const pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4',
-            compress: true
-        });
-        
-        // Добавляем шрифт с поддержкой кириллицы (Arial)
-        const fontData = await fetch('https://raw.githubusercontent.com/SheetJS/js-xlsx/master/misc/font/arial.ttf')
-            .then(res => res.arrayBuffer());
-        
-        pdf.addFileToVFS('Arial.ttf', this.arrayBufferToBase64(fontData));
-        pdf.addFont('Arial.ttf', 'Arial', 'normal');
-        pdf.setFont('Arial');
-        
-        const printType = settings.printType || 'thermal';
-        const labelSize = settings.labelSize || '58x38.6';
-        const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-        const gap = parseInt(settings.gap) || 5;
-        
-        if (printType === 'thermal') {
-            // Для термоэтикеток - каждая этикетка на отдельной странице
-            for (let i = 0; i < labels.length; i++) {
-                if (i > 0) {
-                    pdf.addPage([labelWidth, labelHeight]);
-                }
-                this.drawLabelOnPDF(pdf, labels[i], settings, 0, 0, labelWidth, labelHeight);
+    // ==================== ГЕНЕРАЦИЯ PDF ====================
+    const PDFGenerator = {
+        async generateLabelsPDF(labels, settings) {
+            const { jsPDF } = window.jspdf;
+            
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+            });
+            
+            // Загружаем шрифт с поддержкой кириллицы
+            try {
+                const fontData = await this.loadCyrillicFont();
+                pdf.addFileToVFS('Arial Cyr.ttf', fontData);
+                pdf.addFont('Arial Cyr.ttf', 'Arial Cyr', 'normal');
+                pdf.setFont('Arial Cyr');
+            } catch (error) {
+                console.error('Ошибка загрузки шрифта:', error);
+                Utils.showToast('Внимание: могут быть проблемы с отображением кириллицы');
             }
-        } else {
-            // Для A4 - размещаем максимум этикеток на странице
-            const pageWidth = 210;
-            const pageHeight = 297;
             
-            const cols = Math.floor((pageWidth - gap) / (labelWidth + gap));
-            const rows = Math.floor((pageHeight - gap) / (labelHeight + gap));
+            const printType = settings.printType || 'thermal';
+            const labelSize = settings.labelSize || '58x38.6';
+            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+            const gap = parseInt(settings.gap) || 5;
             
-            let currentPage = 0;
-            let labelIndex = 0;
+            if (printType === 'thermal') {
+                for (let i = 0; i < labels.length; i++) {
+                    if (i > 0) {
+                        pdf.addPage([labelWidth, labelHeight]);
+                    }
+                    this.drawLabelOnPDF(pdf, labels[i], settings, 0, 0, labelWidth, labelHeight);
+                }
+            } else {
+                const pageWidth = 210;
+                const pageHeight = 297;
+                
+                const cols = Math.floor((pageWidth - gap) / (labelWidth + gap));
+                const rows = Math.floor((pageHeight - gap) / (labelHeight + gap));
+                
+                let currentPage = 0;
+                let labelIndex = 0;
+                
+                while (labelIndex < labels.length) {
+                    if (currentPage > 0) {
+                        pdf.addPage('a4');
+                    }
+                    
+                    for (let row = 0; row < rows && labelIndex < labels.length; row++) {
+                        for (let col = 0; col < cols && labelIndex < labels.length; col++) {
+                            const x = col * (labelWidth + gap) + gap / 2;
+                            const y = row * (labelHeight + gap) + gap / 2;
+                            this.drawLabelOnPDF(pdf, labels[labelIndex], settings, x, y, labelWidth, labelHeight);
+                            labelIndex++;
+                        }
+                    }
+                    currentPage++;
+                }
+            }
             
-            while (labelIndex < labels.length) {
-                if (currentPage > 0) {
-                    pdf.addPage('a4');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            pdf.save(`labels_${timestamp}.pdf`);
+        },
+        
+        async loadCyrillicFont() {
+            // Используем base64 закодированный шрифт Arial с поддержкой кириллицы
+            // Это упрощенная версия - в продакшене лучше загрузить реальный шрифт
+            const response = await fetch('https://raw.githubusercontent.com/SheetJS/js-xlsx/master/misc/font/arial.ttf');
+            const buffer = await response.arrayBuffer();
+            return this.arrayBufferToBase64(buffer);
+        },
+        
+        arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        },
+        
+        drawLabelOnPDF(pdf, label, settings, x, y, width, height) {
+            const fontSize = parseInt(settings.textSize) || 10;
+            const centerText = settings.centerText !== false;
+            const barcodeOnly = settings.barcodeOnly || false;
+            const noBarcode = settings.noBarcode || false;
+            const colorSizeRow = settings.colorSizeRow || false;
+            const barcodeFormat = settings.barcodeFormat || 'auto';
+            
+            let format = barcodeFormat;
+            if (barcodeFormat === 'auto') {
+                format = Utils.detectBarcodeFormat(label.barcode);
+            }
+            
+            pdf.setFontSize(fontSize);
+            pdf.setTextColor(0, 0, 0);
+            
+            let currentY = y + 2;
+            const lineHeight = fontSize * 0.35;
+            
+            if (!barcodeOnly && !noBarcode) {
+                const canvas = document.createElement('canvas');
+                try {
+                    JsBarcode(canvas, label.barcode, {
+                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
+                        width: 1.5,
+                        height: 20,
+                        displayValue: false,
+                        margin: 0
+                    });
+                    
+                    const imgData = canvas.toDataURL('image/png');
+                    const barcodeWidth = width - 4;
+                    pdf.addImage(imgData, 'PNG', x + 2, currentY, barcodeWidth, 20);
+                    currentY += 22;
+                    
+                    pdf.setFontSize(7);
+                    const barcodeTextX = centerText ? x + width / 2 : x + 2;
+                    pdf.text(label.barcode, barcodeTextX, currentY, centerText ? { align: 'center' } : {});
+                    currentY += 3;
+                    pdf.setFontSize(fontSize);
+                } catch (e) {
+                    console.error('Ошибка генерации штрихкода:', e);
+                }
+            }
+            
+            if (!barcodeOnly) {
+                pdf.setFont('Arial Cyr', 'bold');
+                const articleText = `Артикул: ${label.article}`;
+                const articleX = centerText ? x + width / 2 : x + 2;
+                pdf.text(articleText, articleX, currentY, centerText ? { align: 'center' } : {});
+                currentY += lineHeight + 1;
+                pdf.setFont('Arial Cyr', 'normal');
+                
+                if (label.name) {
+                    const wrappedName = this.wrapText(label.name, width - 4, fontSize);
+                    const nameX = centerText ? x + width / 2 : x + 2;
+                    wrappedName.forEach(line => {
+                        pdf.text(line, nameX, currentY, centerText ? { align: 'center' } : {});
+                        currentY += lineHeight + 1;
+                    });
                 }
                 
-                for (let row = 0; row < rows && labelIndex < labels.length; row++) {
-                    for (let col = 0; col < cols && labelIndex < labels.length; col++) {
-                        const x = col * (labelWidth + gap) + gap / 2;
-                        const y = row * (labelHeight + gap) + gap / 2;
-                        this.drawLabelOnPDF(pdf, labels[labelIndex], settings, x, y, labelWidth, labelHeight);
-                        labelIndex++;
+                if (colorSizeRow) {
+                    let colorSizeText = '';
+                    if (label.color) colorSizeText += `Цвет: ${label.color}`;
+                    if (label.color && label.size) colorSizeText += ' / ';
+                    if (label.size) colorSizeText += `Разм.: ${label.size}`;
+                    
+                    if (colorSizeText) {
+                        const csX = centerText ? x + width / 2 : x + 2;
+                        pdf.text(colorSizeText, csX, currentY, centerText ? { align: 'center' } : {});
+                        currentY += lineHeight + 1;
+                    }
+                } else {
+                    if (label.color) {
+                        const colorX = centerText ? x + width / 2 : x + 2;
+                        pdf.text(`Цвет: ${label.color}`, colorX, currentY, centerText ? { align: 'center' } : {});
+                        currentY += lineHeight + 1;
+                    }
+                    if (label.size) {
+                        const sizeX = centerText ? x + width / 2 : x + 2;
+                        pdf.text(`Размер: ${label.size}`, sizeX, currentY, centerText ? { align: 'center' } : {});
+                        currentY += lineHeight + 1;
                     }
                 }
-                currentPage++;
-            }
-        }
-        
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        pdf.save(`labels_${timestamp}.pdf`);
-    },
-    
-    arrayBufferToBase64(buffer) {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return window.btoa(binary);
-    },
-    
-    drawLabelOnPDF(pdf, label, settings, x, y, width, height) {
-        const fontSize = parseInt(settings.textSize) || 10;
-        const centerText = settings.centerText !== false;
-        const barcodeOnly = settings.barcodeOnly || false;
-        const noBarcode = settings.noBarcode || false;
-        const colorSizeRow = settings.colorSizeRow || false;
-        const barcodeFormat = settings.barcodeFormat || 'auto';
-        
-        // Определяем формат штрихкода
-        let format = barcodeFormat;
-        if (barcodeFormat === 'auto') {
-            format = Utils.detectBarcodeFormat(label.barcode);
-        }
-        
-        pdf.setFontSize(fontSize);
-        pdf.setTextColor(0, 0, 0);
-        
-        let currentY = y + 2;
-        const lineHeight = fontSize * 0.35;
-        
-        if (!barcodeOnly && !noBarcode) {
-            // Рисуем штрихкод через canvas
-            const canvas = document.createElement('canvas');
-            try {
-                JsBarcode(canvas, label.barcode, {
-                    format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                    width: 1.5,
-                    height: 20,
-                    displayValue: false,
-                    margin: 0
-                });
                 
-                const imgData = canvas.toDataURL('image/png');
-                const barcodeWidth = width - 4;
-                pdf.addImage(imgData, 'PNG', x + 2, currentY, barcodeWidth, 20);
-                currentY += 22;
-                
-                // Текст под штрихкодом
-                pdf.setFontSize(7);
-                const barcodeTextX = centerText ? x + width / 2 : x + 2;
-                pdf.text(label.barcode, barcodeTextX, currentY, centerText ? { align: 'center' } : {});
-                currentY += 3;
-                pdf.setFontSize(fontSize);
-            } catch (e) {
-                console.error('Ошибка генерации штрихкода:', e);
-            }
-        }
-        
-        if (!barcodeOnly) {
-            // Артикул
-            pdf.setFont('Arial', 'bold');
-            const articleText = `Артикул: ${label.article}`;
-            const articleX = centerText ? x + width / 2 : x + 2;
-            pdf.text(articleText, articleX, currentY, centerText ? { align: 'center' } : {});
-            currentY += lineHeight + 1;
-            pdf.setFont('Arial', 'normal');
-            
-            // Название товара
-            if (label.name) {
-                const wrappedName = this.wrapText(label.name, width - 4, fontSize);
-                const nameX = centerText ? x + width / 2 : x + 2;
-                wrappedName.forEach(line => {
-                    pdf.text(line, nameX, currentY, centerText ? { align: 'center' } : {});
-                    currentY += lineHeight + 1;
-                });
-            }
-            
-            // Цвет и размер
-            if (colorSizeRow) {
-                let colorSizeText = '';
-                if (label.color) colorSizeText += `Цвет: ${label.color}`;
-                if (label.color && label.size) colorSizeText += ' / ';
-                if (label.size) colorSizeText += `Разм.: ${label.size}`;
-                
-                if (colorSizeText) {
-                    const csX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(colorSizeText, csX, currentY, centerText ? { align: 'center' } : {});
+                if (label.seller) {
+                    const sellerX = centerText ? x + width / 2 : x + 2;
+                    pdf.text(label.seller, sellerX, currentY, centerText ? { align: 'center' } : {});
                     currentY += lineHeight + 1;
                 }
-            } else {
-                if (label.color) {
-                    const colorX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(`Цвет: ${label.color}`, colorX, currentY, centerText ? { align: 'center' } : {});
+                
+                if (label.gtin) {
+                    const gtinX = centerText ? x + width / 2 : x + 2;
+                    pdf.text(`GTIN: ${label.gtin}`, gtinX, currentY, centerText ? { align: 'center' } : {});
                     currentY += lineHeight + 1;
                 }
-                if (label.size) {
-                    const sizeX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(`Размер: ${label.size}`, sizeX, currentY, centerText ? { align: 'center' } : {});
+                
+                if (label.brand) {
+                    pdf.setFont('Arial Cyr', 'bold');
+                    const brandX = centerText ? x + width / 2 : x + 2;
+                    pdf.text(`Бренд: ${label.brand}`, brandX, currentY, centerText ? { align: 'center' } : {});
+                    pdf.setFont('Arial Cyr', 'normal');
                     currentY += lineHeight + 1;
+                }
+                
+                if (label.expiry) {
+                    const expiryX = centerText ? x + width / 2 : x + 2;
+                    pdf.text(`Срок годности: ${label.expiry}`, expiryX, currentY, centerText ? { align: 'center' } : {});
+                }
+            }
+        },
+        
+        wrapText(text, maxWidth, fontSize) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+            const charWidth = fontSize * 0.6 * 0.264583;
+            
+            for (let word of words) {
+                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                const testWidth = testLine.length * charWidth;
+                
+                if (testWidth > maxWidth && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
                 }
             }
             
-            // Продавец
-            if (label.seller) {
-                const sellerX = centerText ? x + width / 2 : x + 2;
-                pdf.text(label.seller, sellerX, currentY, centerText ? { align: 'center' } : {});
-                currentY += lineHeight + 1;
-            }
-            
-            // GTIN
-            if (label.gtin) {
-                const gtinX = centerText ? x + width / 2 : x + 2;
-                pdf.text(`GTIN: ${label.gtin}`, gtinX, currentY, centerText ? { align: 'center' } : {});
-                currentY += lineHeight + 1;
-            }
-            
-            // Бренд
-            if (label.brand) {
-                pdf.setFont('Arial', 'bold');
-                const brandX = centerText ? x + width / 2 : x + 2;
-                pdf.text(`Бренд: ${label.brand}`, brandX, currentY, centerText ? { align: 'center' } : {});
-                pdf.setFont('Arial', 'normal');
-                currentY += lineHeight + 1;
-            }
-            
-            // Срок годности
-            if (label.expiry) {
-                const expiryX = centerText ? x + width / 2 : x + 2;
-                pdf.text(`Срок годности: ${label.expiry}`, expiryX, currentY, centerText ? { align: 'center' } : {});
-            }
-        }
-    },
-    
-    wrapText(text, maxWidth, fontSize) {
-        const words = text.split(' ');
-        const lines = [];
-        let currentLine = '';
-        const charWidth = fontSize * 0.6 * 0.264583;
-        
-        for (let word of words) {
-            const testLine = currentLine + (currentLine ? ' ' : '') + word;
-            const testWidth = testLine.length * charWidth;
-            
-            if (testWidth > maxWidth && currentLine) {
+            if (currentLine) {
                 lines.push(currentLine);
-                currentLine = word;
-            } else {
-                currentLine = testLine;
             }
+            
+            return lines;
         }
-        
-        if (currentLine) {
-            lines.push(currentLine);
-        }
-        
-        return lines;
-    }
-};
+    };
 
     // ==================== ПРИЛОЖЕНИЕ ====================
     const App = {
@@ -510,7 +490,6 @@ const PDFGenerator = {
         },
         
         bindEvents() {
-            // Навигация
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -519,30 +498,25 @@ const PDFGenerator = {
                 });
             });
             
-            // Добавление этикетки
             document.getElementById('btn-add-label').addEventListener('click', () => {
                 this.navigate('create');
             });
             
-            // Отмена создания
             document.getElementById('btn-cancel-create').addEventListener('click', () => {
                 this.navigate('labels');
             });
             
-            // Форма создания
             document.getElementById('create-label-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.createLabel();
             });
             
-            // Генерация штрихкода
             document.getElementById('btn-generate-barcode').addEventListener('click', () => {
                 const barcodeInput = document.querySelector('#create-label-form input[name="barcode"]');
                 const formatSelect = document.getElementById('create-barcode-format');
                 const format = formatSelect ? formatSelect.value : 'EAN13';
                 barcodeInput.value = Utils.generateBarcode(format);
                 
-                // Автоматически определяем и показываем формат
                 const detectedFormat = Utils.detectBarcodeFormat(barcodeInput.value);
                 const formatDisplay = document.getElementById('create-barcode-format-display');
                 if (formatDisplay) {
@@ -550,30 +524,25 @@ const PDFGenerator = {
                 }
             });
             
-            // Импорт Excel
             document.getElementById('btn-import-excel').addEventListener('click', () => {
                 this.navigate('import');
             });
             
-            // Экспорт Excel
             document.getElementById('btn-export-excel').addEventListener('click', () => {
                 this.exportToExcel();
             });
             
-            // Поиск
             document.getElementById('search-input').addEventListener('input', (e) => {
                 this.currentFilter = e.target.value.toLowerCase();
                 this.renderLabels();
             });
             
-            // Очистка фильтров
             document.getElementById('btn-clear-filters').addEventListener('click', () => {
                 document.getElementById('search-input').value = '';
                 this.currentFilter = '';
                 this.renderLabels();
             });
             
-            // Выбрать все
             document.getElementById('select-all').addEventListener('change', (e) => {
                 const checkboxes = document.querySelectorAll('.label-checkbox');
                 checkboxes.forEach(cb => {
@@ -588,7 +557,6 @@ const PDFGenerator = {
                 this.updateBulkActions();
             });
             
-            // Массовые действия
             document.getElementById('btn-bulk-duplicate').addEventListener('click', () => {
                 this.duplicateSelected();
             });
@@ -605,7 +573,6 @@ const PDFGenerator = {
                 this.navigateToPrint();
             });
             
-            // Модальное окно редактирования
             document.getElementById('modal-close').addEventListener('click', () => {
                 document.getElementById('edit-modal').classList.add('hidden');
             });
@@ -619,7 +586,6 @@ const PDFGenerator = {
                 this.saveEdit();
             });
             
-            // Копирование штрихкода
             document.addEventListener('click', (e) => {
                 if (e.target.classList.contains('btn-copy-barcode')) {
                     const barcodeInput = e.target.closest('.input-with-btn').querySelector('input');
@@ -627,7 +593,6 @@ const PDFGenerator = {
                 }
             });
             
-            // Настройки печати
             document.getElementById('btn-back-to-labels').addEventListener('click', () => {
                 this.navigate('labels');
             });
@@ -636,7 +601,6 @@ const PDFGenerator = {
                 this.printLabels();
             });
             
-            // Выбор шаблона
             document.querySelectorAll('.template-card').forEach(card => {
                 card.addEventListener('click', () => {
                     document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
@@ -644,7 +608,6 @@ const PDFGenerator = {
                 });
             });
             
-            // Изменение настроек печати - обновление превью
             ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only', 
              'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type'].forEach(id => {
                 const el = document.getElementById(id);
@@ -653,10 +616,7 @@ const PDFGenerator = {
                 }
             });
             
-            // Импорт файлов
             this.initImport();
-            
-            // Импорт количества
             this.initQuantityImport();
         },
         
@@ -680,7 +640,6 @@ const PDFGenerator = {
         },
         
         navigateToPrint() {
-            // Сохраняем выбранные этикетки для печати
             this.labelsForPrint = Array.from(this.selectedLabels);
             this.navigate('print');
         },
@@ -757,7 +716,6 @@ const PDFGenerator = {
                 tbody.appendChild(tr);
             });
             
-            // Обработчики событий
             document.querySelectorAll('.label-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
@@ -907,7 +865,6 @@ const PDFGenerator = {
             form.querySelector('input[name="manufacturer"]').value = label.manufacturer || '';
             form.querySelector('input[name="quantity"]').value = label.quantity || 0;
             
-            // Показываем формат штрихкода
             const format = Utils.detectBarcodeFormat(label.barcode);
             const formatDisplay = document.getElementById('edit-barcode-format-display');
             if (formatDisplay) {
@@ -957,19 +914,14 @@ const PDFGenerator = {
             const label = this.labels.find(l => l.id === id);
             if (!label) return;
             
-            // Открываем модальное окно редактирования с данными этикетки
             this.openEditModal(id);
             
-            // Меняем заголовок и поведение кнопки сохранения
             const modalTitle = document.querySelector('#edit-modal .modal-header h2');
-            const saveBtn = document.querySelector('#edit-form button[type="submit"]');
             
             if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
             
-            // Сохраняем оригинальный ID для дублирования
             this.duplicateOriginalId = id;
             
-            // Меняем обработчик формы для дублирования
             const form = document.getElementById('edit-form');
             const originalSubmit = form.onsubmit;
             
@@ -978,7 +930,6 @@ const PDFGenerator = {
                 this.duplicateLabelFromEdit();
             };
             
-            // Восстанавливаем после закрытия
             const originalClose = document.getElementById('modal-close').onclick;
             const closeBtn = document.getElementById('modal-close');
             const cancelBtn = document.getElementById('btn-cancel-edit');
@@ -1034,7 +985,6 @@ const PDFGenerator = {
             document.getElementById('edit-modal').classList.add('hidden');
             Utils.showToast('Этикетка дублирована');
             
-            // Восстанавливаем заголовок
             const modalTitle = document.querySelector('#edit-modal .modal-header h2');
             if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
         },
@@ -1102,7 +1052,6 @@ const PDFGenerator = {
             Utils.showToast('Этикетки удалены');
         },
         
-        // ==================== ИМПОРТ КОЛИЧЕСТВА ====================
         showQuantityImportModal() {
             document.getElementById('quantity-import-modal').classList.remove('hidden');
         },
@@ -1158,7 +1107,6 @@ const PDFGenerator = {
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet);
                     
-                    // Проверяем наличие нужных колонок
                     const hasArticle = jsonData.some(row => 
                         row.hasOwnProperty('Артикул') || row.hasOwnProperty('article') || row.hasOwnProperty('Article')
                     );
@@ -1189,11 +1137,9 @@ const PDFGenerator = {
             
             if (data.length === 0) return;
             
-            // Заголовки
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
             
-            // Данные (первые 10 строк)
             tbody.innerHTML = data.slice(0, 10).map(row => {
                 return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
             }).join('');
@@ -1233,7 +1179,6 @@ const PDFGenerator = {
             Utils.showToast(`Обновлено количество у ${updatedCount} этикеток`);
         },
         
-        // ==================== ПЕЧАТЬ ====================
         updatePrintPreview() {
             const preview = document.getElementById('label-preview');
             const format = document.getElementById('print-barcode-format').value;
@@ -1243,7 +1188,6 @@ const PDFGenerator = {
             const noBarcode = document.getElementById('print-no-barcode').checked;
             const printType = document.getElementById('print-type').value;
             
-            // Берем первую выбранную этикетку для предпросмотра
             const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0 
                 ? this.labelsForPrint[0] 
                 : (this.selectedLabels.size > 0 ? Array.from(this.selectedLabels)[0] : null);
@@ -1301,7 +1245,6 @@ const PDFGenerator = {
             
             preview.innerHTML = html;
             
-            // Генерация штрихкода для предпросмотра
             if (!barcodeOnly && !noBarcode) {
                 setTimeout(() => {
                     try {
@@ -1329,7 +1272,6 @@ const PDFGenerator = {
             const noBarcode = document.getElementById('print-no-barcode').checked;
             const colorSizeRow = document.getElementById('print-color-size-row').checked;
             
-            // Определяем этикетки для печати
             let labelsToPrint = [];
             if (this.labelsForPrint && this.labelsForPrint.length > 0) {
                 labelsToPrint = this.labels.filter(l => this.labelsForPrint.includes(l.id));
@@ -1344,7 +1286,6 @@ const PDFGenerator = {
                 return;
             }
             
-            // Разворачиваем по количеству
             const expandedLabels = [];
             labelsToPrint.forEach(label => {
                 const qty = label.quantity || 1;
@@ -1358,7 +1299,6 @@ const PDFGenerator = {
                 return;
             }
             
-            // Генерируем PDF
             const settings = {
                 printType,
                 labelSize,
@@ -1374,7 +1314,6 @@ const PDFGenerator = {
             await PDFGenerator.generateLabelsPDF(expandedLabels, settings);
         },
         
-        // ==================== ИМПОРТ/ЭКСПОРТ ====================
         initImport() {
             const dropZone = document.getElementById('drop-zone');
             const fileInput = document.getElementById('file-input');
@@ -1450,11 +1389,9 @@ const PDFGenerator = {
             
             if (data.length === 0) return;
             
-            // Заголовки
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
             
-            // Данные (первые 10 строк)
             tbody.innerHTML = data.slice(0, 10).map(row => {
                 return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
             }).join('');
@@ -1475,7 +1412,7 @@ const PDFGenerator = {
                     color: String(row['Цвет'] || row['color'] || ''),
                     size: String(row['Размер'] || row['size'] || ''),
                     name: String(row['Название товара'] || row['name'] || ''),
-                    seller: String(row['Наименование продавца'] || row['seller'] || row['Продавец'] || ''),
+                    seller: String(row['Наименование продавца'] || row['Наименование поставщика'] || row['seller'] || row['Продавец'] || row['Поставщик'] || ''),
                     gtin: String(row['GTIN'] || row['gtin'] || ''),
                     brand: String(row['Бренд'] || row['brand'] || ''),
                     expiry: String(row['Срок годности'] || row['expiry'] || ''),
@@ -1558,7 +1495,6 @@ const PDFGenerator = {
         }
     };
 
-    // Добавляем стили для анимации toast
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideIn {
@@ -1569,19 +1505,9 @@ const PDFGenerator = {
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(400px); opacity: 0; }
         }
-        .barcode-format-badge {
-            display: inline-block;
-            font-size: 10px;
-            padding: 2px 6px;
-            background: #e0e7ff;
-            color: #4f46e5;
-            border-radius: 4px;
-            margin-top: 4px;
-        }
     `;
     document.head.appendChild(style);
 
-    // Запуск приложения
     document.addEventListener('DOMContentLoaded', () => {
         App.init();
     });
