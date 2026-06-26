@@ -845,4 +845,38 @@ body {
     .labels-table td {
         padding: 8px;
     }
+    .col-dates {
+    width: 150px;
+    font-size: 11px;
+}
+
+.barcode-format-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: #e0e7ff;
+    color: #4f46e5;
+    border-radius: 4px;
+    margin-top: 4px;
+}
+
+.preview-label {
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.preview-article,
+.preview-name,
+.preview-color,
+.preview-size,
+.preview-color-size,
+.preview-seller,
+.preview-gtin,
+.preview-brand {
+    margin: 2px 0;
+}
+
+#quantity-import-modal .modal-content {
+    max-width: 700px;
+}
 }
