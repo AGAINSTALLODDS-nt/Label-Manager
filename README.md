@@ -1,11 +1,4 @@
-3. Перейдите в Settings → Pages
-4. Выберите ветку `main` и папку `/root`
-5. Нажмите Save
-6. Ваше приложение будет доступно по адресу: `https://againstallodds-nt.github.io/label-manager/`
-
-### Локальный запуск
-
-Просто откройте файл `index.html` в браузере.
+Приложение доступно по адресу: `https://againstallodds-nt.github.io/label-manager/`
 
 ## Использование
 
