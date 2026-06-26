@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
     <!-- Экран авторизации -->
@@ -49,10 +50,6 @@
                     <span class="nav-icon">📋</span>
                     <span>Мои этикетки</span>
                     <span class="badge" id="labels-count">0</span>
-                </a>
-                <a href="#" class="nav-item" data-page="create">
-                    <span class="nav-icon">➕</span>
-                    <span>Создать этикетки</span>
                 </a>
                 <a href="#" class="nav-item" data-page="import">
                     <span class="nav-icon">📊</span>
@@ -103,6 +100,7 @@
                                 <th class="col-name">Название товара</th>
                                 <th class="col-seller">Продавец</th>
                                 <th class="col-gtin">GTIN</th>
+                                <th class="col-dates">Создана/Изменена</th>
                                 <th class="col-actions">Действия</th>
                             </tr>
                         </thead>
@@ -138,6 +136,7 @@
                                 <input type="text" name="barcode" required>
                                 <button type="button" class="btn-secondary btn-sm" id="btn-generate-barcode">Генерировать</button>
                             </div>
+                            <div id="create-barcode-format-display" class="barcode-format-info"></div>
                         </div>
                         <div class="form-group">
                             <label>Цвет</label>
@@ -224,10 +223,20 @@
 
                     <div class="settings-grid">
                         <div class="form-group">
+                            <label>Тип печати</label>
+                            <select id="print-type">
+                                <option value="thermal">🏷️ Термоэтикетка (1 этикетка = 1 страница)</option>
+                                <option value="a4">📄 Лист А4 (несколько этикеток)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label>Формат штрихкода</label>
                             <select id="print-barcode-format">
+                                <option value="auto">Авто (определять автоматически)</option>
                                 <option value="CODE128">CODE-128</option>
                                 <option value="EAN13">EAN-13</option>
+                                <option value="EAN8">EAN-8</option>
+                                <option value="UPC">UPC</option>
                                 <option value="CODE39">CODE-39</option>
                             </select>
                         </div>
@@ -260,6 +269,10 @@
                                 <option value="landscape">Альбомная</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label>Зазор между этикетками (для А4), мм</label>
+                            <input type="number" id="print-gap" value="5" min="0" max="20">
+                        </div>
                     </div>
 
                     <div class="checkbox-group">
@@ -268,8 +281,8 @@
                             <span>Надписи по центру</span>
                         </label>
                         <label class="checkbox-label">
-                            <input type="checkbox" id="print-color-size-row">
-                            <span>Цвет и Размер в одну строку</span>
+                            <input type="checkbox" id="print-color-size-row" checked>
+                            <span>Цвет и Размер в одну строку (Цвет: X / Разм.: Y)</span>
                         </label>
                         <label class="checkbox-label">
                             <input type="checkbox" id="print-barcode-only">
@@ -288,7 +301,7 @@
                     </div>
 
                     <div class="print-actions">
-                        <button class="btn-primary btn-lg" id="btn-print">🖨️ Печать</button>
+                        <button class="btn-primary btn-lg" id="btn-print">🖨️ Скачать PDF</button>
                         <button class="btn-secondary btn-lg" id="btn-back-to-labels">← Назад к этикеткам</button>
                     </div>
                 </div>
@@ -348,15 +361,16 @@
         </main>
     </div>
 
-    <!-- Модальное окно редактирования -->
+    <!-- Модальное окно редактирования / дублирования -->
     <div id="edit-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Редактировать этикетку</h2>
+                <h2 id="edit-modal-title">Редактировать этикетку</h2>
                 <button class="modal-close" id="modal-close">✕</button>
             </div>
             <form id="edit-form" class="form-container">
                 <input type="hidden" name="id">
+                <input type="hidden" name="mode" value="edit">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Артикул *</label>
@@ -368,6 +382,7 @@
                             <input type="text" name="barcode" required>
                             <button type="button" class="btn-secondary btn-sm btn-copy-barcode" title="Копировать">📋</button>
                         </div>
+                        <div id="edit-barcode-format-display" class="barcode-format-info"></div>
                     </div>
                     <div class="form-group">
                         <label>Цвет</label>
@@ -415,32 +430,58 @@
                     </div>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary">Сохранить</button>
+                    <button type="submit" class="btn-primary" id="edit-submit-btn">Сохранить</button>
                     <button type="button" class="btn-secondary" id="btn-cancel-edit">Отмена</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Модальное окно установки количества -->
-    <div id="quantity-modal" class="modal hidden">
-        <div class="modal-content modal-sm">
+    <!-- Модальное окно импорта количества из Excel -->
+    <div id="quantity-import-modal" class="modal hidden">
+        <div class="modal-content">
             <div class="modal-header">
-                <h2>Установить количество</h2>
-                <button class="modal-close" id="quantity-modal-close">✕</button>
+                <h2>📥 Импорт количества из Excel</h2>
+                <button class="modal-close" id="quantity-import-modal-close">✕</button>
             </div>
-            <div class="form-group">
-                <label>Количество для печати</label>
-                <input type="number" id="bulk-quantity" value="1" min="0">
+            <div class="import-instructions" style="margin-bottom: 20px;">
+                <p>Загрузите Excel файл с колонками:</p>
+                <ul>
+                    <li><strong>Артикул</strong> (обязательно) — должен совпадать с артикулом в базе</li>
+                    <li><strong>Количество</strong> (обязательно) — число копий для печати</li>
+                </ul>
+                <p style="color: var(--text-secondary); font-size: 13px;">
+                    💡 Количества будут обновлены только для тех артикулов, которые найдены в базе.
+                </p>
             </div>
-            <div class="form-actions">
-                <button class="btn-primary" id="btn-confirm-quantity">Применить</button>
-                <button class="btn-secondary" id="btn-cancel-quantity">Отмена</button>
+            <div class="import-area">
+                <div class="drop-zone" id="quantity-drop-zone">
+                    <div class="drop-zone-content">
+                        <div class="drop-zone-icon">📁</div>
+                        <p>Перетащите файл сюда или</p>
+                        <button class="btn-primary" id="quantity-btn-select-file">Выбрать файл</button>
+                        <input type="file" id="quantity-file-input" accept=".xlsx,.xls" class="hidden">
+                    </div>
+                </div>
+                <div id="quantity-import-preview" class="import-preview hidden">
+                    <h3>Предпросмотр данных</h3>
+                    <div id="quantity-import-count" style="margin: 10px 0; font-weight: bold; color: var(--primary);"></div>
+                    <div class="table-container">
+                        <table class="preview-table" id="quantity-preview-table">
+                            <thead id="quantity-preview-thead"></thead>
+                            <tbody id="quantity-preview-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="import-actions">
+                        <button class="btn-primary" id="quantity-btn-confirm">✅ Применить</button>
+                        <button class="btn-secondary" id="quantity-btn-cancel">Отмена</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Область для печати -->
+    <!-- Область для печати (используется для генерации штрихкодов перед PDF) -->
     <div id="print-area" class="print-area"></div>
 
     <script src="js/app.js"></script>
