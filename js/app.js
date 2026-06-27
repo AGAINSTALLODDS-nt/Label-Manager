@@ -7,35 +7,28 @@
         getUsers() {
             return JSON.parse(localStorage.getItem('lm_users') || '[]');
         },
-        
         saveUsers(users) {
             localStorage.setItem('lm_users', JSON.stringify(users));
         },
-        
         getCurrentUser() {
             return JSON.parse(localStorage.getItem('lm_current_user') || 'null');
         },
-        
         setCurrentUser(user) {
             localStorage.setItem('lm_current_user', JSON.stringify(user));
         },
-        
         getLabels(userId) {
             const allLabels = JSON.parse(localStorage.getItem('lm_labels') || '{}');
             return allLabels[userId] || [];
         },
-        
         saveLabels(userId, labels) {
             const allLabels = JSON.parse(localStorage.getItem('lm_labels') || '{}');
             allLabels[userId] = labels;
             localStorage.setItem('lm_labels', JSON.stringify(allLabels));
         },
-        
         getPrintSettings(userId) {
             const allSettings = JSON.parse(localStorage.getItem('lm_print_settings') || '{}');
             return allSettings[userId] || {};
         },
-        
         savePrintSettings(userId, settings) {
             const allSettings = JSON.parse(localStorage.getItem('lm_print_settings') || '{}');
             allSettings[userId] = settings;
@@ -48,7 +41,7 @@
         generateId() {
             return Date.now().toString(36) + Math.random().toString(36).substr(2);
         },
-        
+
         generateBarcode(format = 'EAN13') {
             if (format === 'EAN13') {
                 let code = '';
@@ -69,29 +62,26 @@
                 return code;
             }
         },
-        
+
         detectBarcodeFormat(barcode) {
+            if (!barcode) return 'CODE128';
             const cleanBarcode = barcode.replace(/\D/g, '');
             
-            if (cleanBarcode.length === 13) {
-                return 'EAN13';
-            } else if (cleanBarcode.length === 8) {
-                return 'EAN8';
-            } else if (cleanBarcode.length === 12) {
-                return 'UPC';
-            } else if (barcode.startsWith('*') && barcode.endsWith('*') && barcode.length > 2) {
-                return 'CODE39';
-            } else {
-                return 'CODE128';
-            }
+            if (cleanBarcode.length === 13) return 'EAN13';
+            if (cleanBarcode.length === 8) return 'EAN8';
+            if (cleanBarcode.length === 12) return 'UPC';
+            if (barcode.startsWith('*') && barcode.endsWith('*') && barcode.length > 2) return 'CODE39';
+            
+            return 'CODE128';
         },
-        
+
         escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         },
-        
+
         copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
                 this.showToast('Скопировано в буфер обмена');
@@ -105,22 +95,31 @@
                 this.showToast('Скопировано в буфер обмена');
             });
         },
-        
-        showToast(message) {
+
+        showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = 'toast';
             toast.textContent = message;
+            
+            const colors = {
+                info: 'var(--text)',
+                success: 'var(--success)',
+                error: 'var(--danger)',
+                warning: 'var(--warning)'
+            };
+            
             toast.style.cssText = `
                 position: fixed;
                 bottom: 24px;
                 right: 24px;
-                background: var(--text);
+                background: ${colors[type] || colors.info};
                 color: white;
                 padding: 12px 24px;
                 border-radius: 8px;
                 box-shadow: var(--shadow-lg);
                 z-index: 10000;
                 animation: slideIn 0.3s ease;
+                max-width: 400px;
             `;
             document.body.appendChild(toast);
             setTimeout(() => {
@@ -128,17 +127,21 @@
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         },
-        
+
         formatDate(dateString) {
             if (!dateString) return '';
-            const date = new Date(dateString);
-            return date.toLocaleString('ru-RU', {
-                day: '2-digit',
-                month: '2-digit',
-                year: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return '';
+            }
         }
     };
 
@@ -151,42 +154,42 @@
             } else {
                 document.getElementById('auth-screen').classList.remove('hidden');
             }
-            
+
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    
+
                     const tabName = tab.dataset.tab;
                     document.getElementById('login-form').classList.toggle('hidden', tabName !== 'login');
                     document.getElementById('register-form').classList.toggle('hidden', tabName !== 'register');
                     document.getElementById('auth-error').classList.add('hidden');
                 });
             });
-            
+
             document.getElementById('login-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.login();
             });
-            
+
             document.getElementById('register-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.register();
             });
-            
+
             document.getElementById('btn-logout').addEventListener('click', () => {
                 this.logout();
             });
         },
-        
+
         login() {
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
             const errorEl = document.getElementById('auth-error');
-            
+
             const users = Storage.getUsers();
             const user = users.find(u => u.username === username && u.password === password);
-            
+
             if (user) {
                 Storage.setCurrentUser(user);
                 errorEl.classList.add('hidden');
@@ -196,41 +199,41 @@
                 errorEl.classList.remove('hidden');
             }
         },
-        
+
         register() {
             const username = document.getElementById('reg-username').value.trim();
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
             const errorEl = document.getElementById('auth-error');
-            
+
             if (password !== passwordConfirm) {
                 errorEl.textContent = 'Пароли не совпадают';
                 errorEl.classList.remove('hidden');
                 return;
             }
-            
+
             const users = Storage.getUsers();
             if (users.find(u => u.username === username)) {
                 errorEl.textContent = 'Пользователь с таким логином уже существует';
                 errorEl.classList.remove('hidden');
                 return;
             }
-            
+
             const newUser = {
                 id: Utils.generateId(),
                 username,
                 password,
                 createdAt: new Date().toISOString()
             };
-            
+
             users.push(newUser);
             Storage.saveUsers(users);
             Storage.setCurrentUser(newUser);
-            
+
             errorEl.classList.add('hidden');
             App.showMainApp();
         },
-        
+
         logout() {
             localStorage.removeItem('lm_current_user');
             document.getElementById('app').classList.add('hidden');
@@ -241,283 +244,279 @@
     };
 
     // ==================== ГЕНЕРАЦИЯ PDF (PDFmake) ====================
-const PDFGenerator = {
-    async generateLabelsPDF(labels, settings) {
-        const printType = settings.printType || 'thermal';
-        const labelSize = settings.labelSize || '58x38.6';
-        const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-        const gap = parseInt(settings.gap) || 5;
-        const fontSize = parseInt(settings.textSize) || 10;
-        const centerText = settings.centerText !== false;
-        const barcodeOnly = settings.barcodeOnly || false;
-        const noBarcode = settings.noBarcode || false;
-        const colorSizeRow = settings.colorSizeRow || false;
+    const PDFGenerator = {
+        async generateLabelsPDF(labels, settings) {
+            if (typeof window.pdfMake === 'undefined') {
+                Utils.showToast('Библиотека PDF не загружена', 'error');
+                return;
+            }
 
-        // Конвертируем размер шрифта из pt в единицы pdfmake (по умолчанию pt)
-        const fs = fontSize;
-        const fsSmall = Math.max(6, fontSize - 3);
-        const lineHeight = fontSize * 1.2;
+            const printType = settings.printType || 'thermal';
+            const labelSize = settings.labelSize || '58x38.6';
+            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+            const gap = parseInt(settings.gap) || 5;
+            const fontSize = parseInt(settings.textSize) || 10;
+            const centerText = settings.centerText !== false;
+            const barcodeOnly = settings.barcodeOnly || false;
+            const noBarcode = settings.noBarcode || false;
+            const colorSizeRow = settings.colorSizeRow || false;
+            const barcodeFormatSetting = settings.barcodeFormat || 'auto';
 
-        // Генерируем штрихкоды как изображения
-        const barcodeImages = await this.generateBarcodeImages(labels, settings);
+            // Генерируем изображения штрихкодов
+            const barcodeImages = await this.generateBarcodeImages(labels, barcodeFormatSetting);
 
-        const docDefinition = {
-            pageSize: 'A4',
-            pageMargins: [5, 5, 5, 5],
-            content: []
-        };
+            // Собираем содержимое документа
+            const docContent = [];
 
-        if (printType === 'thermal') {
-            // Термоэтикетка — каждая на отдельной странице
-            labels.forEach((label, index) => {
-                if (index > 0) {
-                    docDefinition.content.push({ text: '', pageBreak: 'before' });
-                }
-                
-                const labelContent = this.buildLabelContent(
-                    label, barcodeImages[index], settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow
-                );
-                
-                docDefinition.content.push({
-                    table: {
-                        widths: [labelWidth + 'mm'],
-                        body: [[{
-                            stack: labelContent,
-                            alignment: centerText ? 'center' : 'left',
-                            margin: [2, 2, 2, 2]
-                        }]]
-                    },
-                    layout: 'noBorders'
-                });
-            });
-        } else {
-            // A4 — несколько этикеток на странице
-            const pageWidth = 210;
-            const pageHeight = 297;
-            const cols = Math.floor((pageWidth - gap) / (labelWidth + gap));
-            const rows = Math.floor((pageHeight - gap) / (labelHeight + gap));
-            
-            let labelIndex = 0;
-            
-            while (labelIndex < labels.length) {
-                const pageLabels = [];
-                for (let row = 0; row < rows && labelIndex < labels.length; row++) {
-                    const pageRow = [];
-                    for (let col = 0; col < cols && labelIndex < labels.length; col++) {
-                        const labelContent = this.buildLabelContent(
-                            labels[labelIndex], barcodeImages[labelIndex], settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow
-                        );
-                        pageRow.push({
-                            stack: labelContent,
-                            alignment: centerText ? 'center' : 'left',
-                            margin: [1, 1, 1, 1],
-                            width: labelWidth + 'mm'
-                        });
-                        labelIndex++;
+            if (printType === 'thermal') {
+                // Термоэтикетка - каждая на отдельной странице
+                labels.forEach((label, index) => {
+                    if (index > 0) {
+                        docContent.push({ text: '', pageBreak: 'before' });
                     }
-                    // Дополняем пустыми ячейками если нужно
-                    while (pageRow.length < cols) {
-                        pageRow.push({ text: '', width: labelWidth + 'mm' });
+
+                    const labelContent = this.buildLabelContent(
+                        label, barcodeImages[index], fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow
+                    );
+
+                    docContent.push({
+                        table: {
+                            widths: [labelWidth + 'mm'],
+                            body: [[{
+                                stack: labelContent,
+                                alignment: centerText ? 'center' : 'left',
+                                margin: [2, 2, 2, 2]
+                            }]]
+                        },
+                        layout: 'noBorders'
+                    });
+                });
+            } else {
+                // A4 - несколько этикеток на странице
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const cols = Math.max(1, Math.floor((pageWidth - gap) / (labelWidth + gap)));
+                const rows = Math.max(1, Math.floor((pageHeight - gap) / (labelHeight + gap)));
+
+                let labelIndex = 0;
+                let firstPage = true;
+
+                while (labelIndex < labels.length) {
+                    if (!firstPage) {
+                        docContent.push({ text: '', pageBreak: 'before' });
                     }
-                    pageLabels.push(pageRow);
-                }
-                
-                docDefinition.content.push({
-                    table: {
-                        widths: Array(cols).fill(labelWidth + 'mm'),
-                        body: pageLabels
-                    },
-                    layout: {
-                        hLineWidth: () => 0,
-                        vLineWidth: () => 0,
-                        hLineColor: () => '#ccc',
-                        vLineColor: () => '#ccc',
-                        paddingLeft: () => 1,
-                        paddingRight: () => 1,
-                        paddingTop: () => 1,
-                        paddingBottom: () => 1
+                    firstPage = false;
+
+                    const pageLabels = [];
+                    for (let row = 0; row < rows && labelIndex < labels.length; row++) {
+                        const pageRow = [];
+                        for (let col = 0; col < cols && labelIndex < labels.length; col++) {
+                            const labelContent = this.buildLabelContent(
+                                labels[labelIndex], barcodeImages[labelIndex], fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow
+                            );
+                            pageRow.push({
+                                stack: labelContent,
+                                alignment: centerText ? 'center' : 'left',
+                                margin: [1, 1, 1, 1]
+                            });
+                            labelIndex++;
+                        }
+                        // Дополняем пустыми ячейками
+                        while (pageRow.length < cols) {
+                            pageRow.push({ text: '' });
+                        }
+                        pageLabels.push(pageRow);
                     }
-                });
-                
-                if (labelIndex < labels.length) {
-                    docDefinition.content.push({ text: '', pageBreak: 'before' });
+
+                    docContent.push({
+                        table: {
+                            widths: Array(cols).fill(labelWidth + 'mm'),
+                            body: pageLabels
+                        },
+                        layout: {
+                            hLineWidth: () => 0.5,
+                            vLineWidth: () => 0.5,
+                            hLineColor: () => '#cccccc',
+                            vLineColor: () => '#cccccc',
+                            paddingLeft: () => 2,
+                            paddingRight: () => 2,
+                            paddingTop: () => 2,
+                            paddingBottom: () => 2
+                        }
+                    });
                 }
             }
-        }
 
-        // Генерируем PDF
-        try {
-            pdfMake.createPdf(docDefinition).download(`labels_${new Date().toISOString().split('T')[0]}.pdf`);
-            return true;
-        } catch (error) {
-            console.error('Ошибка генерации PDF:', error);
-            throw error;
-        }
-    },
+            const docDefinition = {
+                pageSize: 'A4',
+                pageMargins: [5, 5, 5, 5],
+                defaultStyle: {
+                    font: 'Roboto'
+                },
+                content: docContent
+            };
 
-    buildLabelContent(label, barcodeImage, settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow) {
-        const content = [];
-        const align = centerText ? 'center' : 'left';
+            try {
+                const pdfDoc = pdfMake.createPdf(docDefinition);
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                pdfDoc.download(`labels_${timestamp}.pdf`);
+                return true;
+            } catch (error) {
+                console.error('Ошибка генерации PDF:', error);
+                throw error;
+            }
+        },
 
-        // Штрихкод
-        if (!barcodeOnly && !noBarcode && barcodeImage) {
-            content.push({
-                image: barcodeImage,
-                width: 50, // мм
-                height: 20,
-                alignment: align,
-                margin: [0, 0, 0, 2]
-            });
-            content.push({
-                text: label.barcode,
-                fontSize: fsSmall,
-                alignment: align,
-                margin: [0, 0, 0, 2]
-            });
-        }
+        buildLabelContent(label, barcodeImage, fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow) {
+            const content = [];
+            const align = centerText ? 'center' : 'left';
 
-        if (barcodeOnly) return content;
-
-        // Артикул
-        content.push({
-            text: `Артикул: ${label.article}`,
-            fontSize: fs,
-            bold: true,
-            alignment: align,
-            margin: [0, 0, 0, 1]
-        });
-
-        // Название товара
-        if (label.name) {
-            content.push({
-                text: label.name,
-                fontSize: fs,
-                alignment: align,
-                margin: [0, 0, 0, 1]
-            });
-        }
-
-        // Цвет и размер
-        if (colorSizeRow) {
-            let colorSizeText = '';
-            if (label.color) colorSizeText += `Цвет: ${label.color}`;
-            if (label.color && label.size) colorSizeText += ' / ';
-            if (label.size) colorSizeText += `Разм.: ${label.size}`;
-            
-            if (colorSizeText) {
+            // Штрихкод
+            if (!barcodeOnly && !noBarcode && barcodeImage) {
                 content.push({
-                    text: colorSizeText,
-                    fontSize: fs,
+                    image: barcodeImage,
+                    width: 50,
+                    height: 20,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 2]
+                });
+                content.push({
+                    text: label.barcode,
+                    fontSize: Math.max(6, fontSize - 3),
+                    alignment: align,
+                    margin: [0, 0, 0, 2]
                 });
             }
-        } else {
-            if (label.color) {
-                content.push({
-                    text: `Цвет: ${label.color}`,
-                    fontSize: fs,
-                    alignment: align,
-                    margin: [0, 0, 0, 1]
-                });
-            }
-            if (label.size) {
-                content.push({
-                    text: `Размер: ${label.size}`,
-                    fontSize: fs,
-                    alignment: align,
-                    margin: [0, 0, 0, 1]
-                });
-            }
-        }
 
-        // Продавец
-        if (label.seller) {
-            content.push({
-                text: label.seller,
-                fontSize: fs,
-                alignment: align,
-                margin: [0, 0, 0, 1]
-            });
-        }
+            if (barcodeOnly) return content;
 
-        // GTIN
-        if (label.gtin) {
+            // Артикул
             content.push({
-                text: `GTIN: ${label.gtin}`,
-                fontSize: fs,
-                alignment: align,
-                margin: [0, 0, 0, 1]
-            });
-        }
-
-        // Бренд
-        if (label.brand) {
-            content.push({
-                text: `Бренд: ${label.brand}`,
-                fontSize: fs,
+                text: `Артикул: ${label.article}`,
+                fontSize: fontSize,
                 bold: true,
                 alignment: align,
                 margin: [0, 0, 0, 1]
             });
-        }
 
-        // Срок годности
-        if (label.expiry) {
-            content.push({
-                text: `Срок годности: ${label.expiry}`,
-                fontSize: fs,
-                alignment: align,
-                margin: [0, 0, 0, 1]
-            });
-        }
-
-        return content;
-    },
-
-    async generateBarcodeImages(labels, settings) {
-        const images = [];
-        const barcodeFormat = settings.barcodeFormat || 'auto';
-
-        for (const label of labels) {
-            let format = barcodeFormat;
-            if (barcodeFormat === 'auto') {
-                format = this.detectBarcodeFormat(label.barcode);
-            }
-
-            const canvas = document.createElement('canvas');
-            try {
-                JsBarcode(canvas, label.barcode, {
-                    format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                    width: 1.5,
-                    height: 40,
-                    displayValue: false,
-                    margin: 0,
-                    background: '#ffffff',
-                    lineColor: '#000000'
+            // Название товара
+            if (label.name) {
+                content.push({
+                    text: label.name,
+                    fontSize: fontSize,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
                 });
-                images.push(canvas.toDataURL('image/png'));
-            } catch (e) {
-                console.error('Ошибка генерации штрихкода:', e);
-                images.push(null);
             }
+
+            // Цвет и размер
+            if (colorSizeRow) {
+                let colorSizeText = '';
+                if (label.color) colorSizeText += `Цвет: ${label.color}`;
+                if (label.color && label.size) colorSizeText += ' / ';
+                if (label.size) colorSizeText += `Разм.: ${label.size}`;
+
+                if (colorSizeText) {
+                    content.push({
+                        text: colorSizeText,
+                        fontSize: fontSize,
+                        alignment: align,
+                        margin: [0, 0, 0, 1]
+                    });
+                }
+            } else {
+                if (label.color) {
+                    content.push({
+                        text: `Цвет: ${label.color}`,
+                        fontSize: fontSize,
+                        alignment: align,
+                        margin: [0, 0, 0, 1]
+                    });
+                }
+                if (label.size) {
+                    content.push({
+                        text: `Размер: ${label.size}`,
+                        fontSize: fontSize,
+                        alignment: align,
+                        margin: [0, 0, 0, 1]
+                    });
+                }
+            }
+
+            // Продавец
+            if (label.seller) {
+                content.push({
+                    text: label.seller,
+                    fontSize: fontSize,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+
+            // GTIN
+            if (label.gtin) {
+                content.push({
+                    text: `GTIN: ${label.gtin}`,
+                    fontSize: fontSize,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+
+            // Бренд
+            if (label.brand) {
+                content.push({
+                    text: `Бренд: ${label.brand}`,
+                    fontSize: fontSize,
+                    bold: true,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+
+            // Срок годности
+            if (label.expiry) {
+                content.push({
+                    text: `Срок годности: ${label.expiry}`,
+                    fontSize: fontSize,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+
+            return content;
+        },
+
+        async generateBarcodeImages(labels, barcodeFormatSetting) {
+            const images = [];
+
+            for (const label of labels) {
+                let format = barcodeFormatSetting;
+                if (barcodeFormatSetting === 'auto') {
+                    format = Utils.detectBarcodeFormat(label.barcode);
+                }
+
+                const canvas = document.createElement('canvas');
+                try {
+                    JsBarcode(canvas, label.barcode, {
+                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
+                        width: 1.5,
+                        height: 40,
+                        displayValue: false,
+                        margin: 0,
+                        background: '#ffffff',
+                        lineColor: '#000000'
+                    });
+                    images.push(canvas.toDataURL('image/png'));
+                } catch (e) {
+                    console.error('Ошибка генерации штрихкода:', e);
+                    images.push(null);
+                }
+            }
+
+            return images;
         }
-
-        return images;
-    },
-
-    detectBarcodeFormat(barcode) {
-        if (!barcode) return 'CODE128';
-        const cleanBarcode = barcode.replace(/\D/g, '');
-        
-        if (cleanBarcode.length === 13) return 'EAN13';
-        if (cleanBarcode.length === 8) return 'EAN8';
-        if (cleanBarcode.length === 12) return 'UPC';
-        if (barcode.startsWith('*') && barcode.endsWith('*')) return 'CODE39';
-        
-        return 'CODE128';
-    }
-};
+    };
 
     // ==================== ПРИЛОЖЕНИЕ ====================
     const App = {
@@ -525,27 +524,29 @@ const PDFGenerator = {
         labels: [],
         selectedLabels: new Set(),
         currentPage: 'labels',
-        itemsPerPage: 15,
         currentFilter: '',
         importQuantityData: null,
-        
+        labelsForPrint: [],
+        duplicateOriginalId: null,
+
         init() {
             Auth.init();
             this.bindEvents();
         },
-        
+
         showMainApp() {
             this.currentUser = Storage.getCurrentUser();
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
             document.getElementById('user-name').textContent = this.currentUser.username;
-            
+
             this.loadLabels();
             this.renderLabels();
             this.updateLabelsCount();
         },
-        
+
         bindEvents() {
+            // Навигация
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -553,52 +554,53 @@ const PDFGenerator = {
                     this.navigate(page);
                 });
             });
-            
+
+            // Добавление этикетки
             document.getElementById('btn-add-label').addEventListener('click', () => {
                 this.navigate('create');
             });
-            
+
             document.getElementById('btn-cancel-create').addEventListener('click', () => {
                 this.navigate('labels');
             });
-            
+
             document.getElementById('create-label-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.createLabel();
             });
-            
+
+            // Генерация штрихкода
             document.getElementById('btn-generate-barcode').addEventListener('click', () => {
                 const barcodeInput = document.querySelector('#create-label-form input[name="barcode"]');
-                const formatSelect = document.getElementById('create-barcode-format');
-                const format = formatSelect ? formatSelect.value : 'EAN13';
-                barcodeInput.value = Utils.generateBarcode(format);
-                
-                const detectedFormat = Utils.detectBarcodeFormat(barcodeInput.value);
+                barcodeInput.value = Utils.generateBarcode('EAN13');
                 const formatDisplay = document.getElementById('create-barcode-format-display');
                 if (formatDisplay) {
-                    formatDisplay.textContent = detectedFormat;
+                    formatDisplay.textContent = 'EAN13 (сгенерирован)';
                 }
             });
-            
+
+            // Импорт/Экспорт Excel
             document.getElementById('btn-import-excel').addEventListener('click', () => {
                 this.navigate('import');
             });
-            
+
             document.getElementById('btn-export-excel').addEventListener('click', () => {
                 this.exportToExcel();
             });
-            
+
+            // Поиск
             document.getElementById('search-input').addEventListener('input', (e) => {
                 this.currentFilter = e.target.value.toLowerCase();
                 this.renderLabels();
             });
-            
+
             document.getElementById('btn-clear-filters').addEventListener('click', () => {
                 document.getElementById('search-input').value = '';
                 this.currentFilter = '';
                 this.renderLabels();
             });
-            
+
+            // Выбрать все
             document.getElementById('select-all').addEventListener('change', (e) => {
                 const checkboxes = document.querySelectorAll('.label-checkbox');
                 checkboxes.forEach(cb => {
@@ -612,132 +614,139 @@ const PDFGenerator = {
                 });
                 this.updateBulkActions();
             });
-            
+
+            // Массовые действия
             document.getElementById('btn-bulk-duplicate').addEventListener('click', () => {
                 this.duplicateSelected();
             });
-            
+
             document.getElementById('btn-bulk-delete').addEventListener('click', () => {
                 this.deleteSelected();
             });
-            
+
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => {
                 this.showQuantityImportModal();
             });
-            
+
             document.getElementById('btn-bulk-print').addEventListener('click', () => {
                 this.navigateToPrint();
             });
-            
+
+            // Модальное окно редактирования
             document.getElementById('modal-close').addEventListener('click', () => {
-                document.getElementById('edit-modal').classList.add('hidden');
+                this.closeEditModal();
             });
-            
+
             document.getElementById('btn-cancel-edit').addEventListener('click', () => {
-                document.getElementById('edit-modal').classList.add('hidden');
+                this.closeEditModal();
             });
-            
+
             document.getElementById('edit-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.saveEdit();
             });
-            
+
+            // Копирование штрихкода
             document.addEventListener('click', (e) => {
                 if (e.target.classList.contains('btn-copy-barcode')) {
                     const barcodeInput = e.target.closest('.input-with-btn').querySelector('input');
                     Utils.copyToClipboard(barcodeInput.value);
                 }
             });
-            
+
+            // Настройки печати
             document.getElementById('btn-back-to-labels').addEventListener('click', () => {
                 this.navigate('labels');
             });
-            
+
             document.getElementById('btn-print').addEventListener('click', () => {
                 this.printLabels();
             });
-            
+
+            // Выбор шаблона
             document.querySelectorAll('.template-card').forEach(card => {
                 card.addEventListener('click', () => {
                     document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
                     card.classList.add('selected');
                 });
             });
-            
-            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only', 
-             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type'].forEach(id => {
+
+            // Обновление превью при изменении настроек
+            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only',
+             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type', 'print-orientation', 'print-gap'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('change', () => this.updatePrintPreview());
+                    el.addEventListener('input', () => this.updatePrintPreview());
                 }
             });
-            
+
             this.initImport();
             this.initQuantityImport();
         },
-        
+
         navigate(page) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            
+
             document.getElementById(`page-${page}`).classList.add('active');
             const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
             if (navItem) {
                 navItem.classList.add('active');
             }
-            
+
             this.currentPage = page;
-            
+
             if (page === 'labels') {
                 this.renderLabels();
             } else if (page === 'print') {
                 this.updatePrintPreview();
             }
         },
-        
+
         navigateToPrint() {
             this.labelsForPrint = Array.from(this.selectedLabels);
             this.navigate('print');
         },
-        
+
         loadLabels() {
             this.labels = Storage.getLabels(this.currentUser.id);
         },
-        
+
         saveLabels() {
             Storage.saveLabels(this.currentUser.id, this.labels);
             this.updateLabelsCount();
         },
-        
+
         updateLabelsCount() {
             document.getElementById('labels-count').textContent = this.labels.length;
         },
-        
+
         renderLabels() {
             const tbody = document.getElementById('labels-tbody');
             tbody.innerHTML = '';
-            
+
             let filteredLabels = this.labels;
             if (this.currentFilter) {
                 filteredLabels = this.labels.filter(label => {
-                    return Object.values(label).some(value => 
-                        String(value).toLowerCase().includes(this.currentFilter)
+                    return Object.values(label).some(value =>
+                        String(value || '').toLowerCase().includes(this.currentFilter)
                     );
                 });
             }
-            
+
             filteredLabels.forEach(label => {
                 const barcodeFormat = Utils.detectBarcodeFormat(label.barcode);
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="col-checkbox">
-                        <input type="checkbox" class="label-checkbox" data-id="${label.id}" 
+                        <input type="checkbox" class="label-checkbox" data-id="${label.id}"
                             ${this.selectedLabels.has(label.id) ? 'checked' : ''}>
                     </td>
                     <td class="col-quantity">
                         <div class="quantity-control">
                             <button class="btn-decrease" data-id="${label.id}">−</button>
-                            <input type="number" class="quantity-input" data-id="${label.id}" 
+                            <input type="number" class="quantity-input" data-id="${label.id}"
                                 value="${label.quantity || 0}" min="0">
                             <button class="btn-increase" data-id="${label.id}">+</button>
                         </div>
@@ -771,7 +780,8 @@ const PDFGenerator = {
                 `;
                 tbody.appendChild(tr);
             });
-            
+
+            // Обработчики
             document.querySelectorAll('.label-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
@@ -783,21 +793,21 @@ const PDFGenerator = {
                     this.updateBulkActions();
                 });
             });
-            
+
             document.querySelectorAll('.btn-decrease').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
                     this.changeQuantity(id, -1);
                 });
             });
-            
+
             document.querySelectorAll('.btn-increase').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
                     this.changeQuantity(id, 1);
                 });
             });
-            
+
             document.querySelectorAll('.quantity-input').forEach(input => {
                 input.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
@@ -805,28 +815,28 @@ const PDFGenerator = {
                     this.updateQuantity(id, quantity);
                 });
             });
-            
+
             document.querySelectorAll('.btn-copy').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const barcode = e.target.dataset.barcode;
                     Utils.copyToClipboard(barcode);
                 });
             });
-            
+
             document.querySelectorAll('.btn-edit').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
-                    this.openEditModal(id);
+                    this.openEditModal(id, 'edit');
                 });
             });
-            
+
             document.querySelectorAll('.btn-duplicate').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
-                    this.duplicateLabelWithEdit(id);
+                    this.openEditModal(id, 'duplicate');
                 });
             });
-            
+
             document.querySelectorAll('.btn-delete').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
@@ -834,11 +844,11 @@ const PDFGenerator = {
                 });
             });
         },
-        
+
         updateBulkActions() {
             const bulkActions = document.getElementById('bulk-actions');
             const count = this.selectedLabels.size;
-            
+
             if (count > 0) {
                 bulkActions.classList.remove('hidden');
                 document.getElementById('selected-count').textContent = `Выбрано: ${count}`;
@@ -846,7 +856,7 @@ const PDFGenerator = {
                 bulkActions.classList.add('hidden');
             }
         },
-        
+
         changeQuantity(id, delta) {
             const label = this.labels.find(l => l.id === id);
             if (label) {
@@ -856,7 +866,7 @@ const PDFGenerator = {
                 this.renderLabels();
             }
         },
-        
+
         updateQuantity(id, quantity) {
             const label = this.labels.find(l => l.id === id);
             if (label) {
@@ -865,14 +875,14 @@ const PDFGenerator = {
                 this.saveLabels();
             }
         },
-        
+
         createLabel() {
             const form = document.getElementById('create-label-form');
             const formData = new FormData(form);
-            
+
             const barcode = formData.get('barcode');
             const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-            
+
             const label = {
                 id: Utils.generateId(),
                 article: formData.get('article'),
@@ -892,19 +902,19 @@ const PDFGenerator = {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
-            
+
             this.labels.push(label);
             this.saveLabels();
-            
+
             form.reset();
-            Utils.showToast('Этикетка создана');
+            Utils.showToast('Этикетка создана', 'success');
             this.navigate('labels');
         },
-        
-        openEditModal(id) {
+
+        openEditModal(id, mode = 'edit') {
             const label = this.labels.find(l => l.id === id);
             if (!label) return;
-            
+
             const form = document.getElementById('edit-form');
             form.querySelector('input[name="id"]').value = label.id;
             form.querySelector('input[name="article"]').value = label.article;
@@ -920,149 +930,97 @@ const PDFGenerator = {
             form.querySelector('input[name="composition"]').value = label.composition || '';
             form.querySelector('input[name="manufacturer"]').value = label.manufacturer || '';
             form.querySelector('input[name="quantity"]').value = label.quantity || 0;
-            
+
             const format = Utils.detectBarcodeFormat(label.barcode);
             const formatDisplay = document.getElementById('edit-barcode-format-display');
             if (formatDisplay) {
-                formatDisplay.textContent = format;
+                formatDisplay.textContent = `Формат: ${format}`;
             }
-            
+
+            const modalTitle = document.getElementById('edit-modal-title');
+            const submitBtn = document.getElementById('edit-submit-btn');
+
+            if (mode === 'duplicate') {
+                if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
+                if (submitBtn) submitBtn.textContent = 'Дублировать';
+                this.duplicateOriginalId = id;
+            } else {
+                if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
+                if (submitBtn) submitBtn.textContent = 'Сохранить';
+                this.duplicateOriginalId = null;
+            }
+
             document.getElementById('edit-modal').classList.remove('hidden');
         },
-        
+
+        closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+            this.duplicateOriginalId = null;
+        },
+
         saveEdit() {
             const form = document.getElementById('edit-form');
             const formData = new FormData(form);
             const id = formData.get('id');
-            
+
             const labelIndex = this.labels.findIndex(l => l.id === id);
             if (labelIndex === -1) return;
-            
+
             const barcode = formData.get('barcode');
             const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-            
-            this.labels[labelIndex] = {
-                ...this.labels[labelIndex],
-                article: formData.get('article'),
-                barcode: barcode,
-                barcodeFormat: barcodeFormat,
-                color: formData.get('color'),
-                size: formData.get('size'),
-                name: formData.get('name'),
-                seller: formData.get('seller'),
-                gtin: formData.get('gtin'),
-                brand: formData.get('brand'),
-                expiry: formData.get('expiry'),
-                country: formData.get('country'),
-                composition: formData.get('composition'),
-                manufacturer: formData.get('manufacturer'),
-                quantity: parseInt(formData.get('quantity')) || 0,
-                updatedAt: new Date().toISOString()
-            };
-            
+
+            if (this.duplicateOriginalId) {
+                // Режим дублирования
+                const newLabel = {
+                    id: Utils.generateId(),
+                    article: formData.get('article'),
+                    barcode: barcode,
+                    barcodeFormat: barcodeFormat,
+                    color: formData.get('color'),
+                    size: formData.get('size'),
+                    name: formData.get('name'),
+                    seller: formData.get('seller'),
+                    gtin: formData.get('gtin'),
+                    brand: formData.get('brand'),
+                    expiry: formData.get('expiry'),
+                    country: formData.get('country'),
+                    composition: formData.get('composition'),
+                    manufacturer: formData.get('manufacturer'),
+                    quantity: parseInt(formData.get('quantity')) || 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                this.labels.push(newLabel);
+                Utils.showToast('Этикетка дублирована', 'success');
+            } else {
+                // Режим редактирования
+                this.labels[labelIndex] = {
+                    ...this.labels[labelIndex],
+                    article: formData.get('article'),
+                    barcode: barcode,
+                    barcodeFormat: barcodeFormat,
+                    color: formData.get('color'),
+                    size: formData.get('size'),
+                    name: formData.get('name'),
+                    seller: formData.get('seller'),
+                    gtin: formData.get('gtin'),
+                    brand: formData.get('brand'),
+                    expiry: formData.get('expiry'),
+                    country: formData.get('country'),
+                    composition: formData.get('composition'),
+                    manufacturer: formData.get('manufacturer'),
+                    quantity: parseInt(formData.get('quantity')) || 0,
+                    updatedAt: new Date().toISOString()
+                };
+                Utils.showToast('Изменения сохранены', 'success');
+            }
+
             this.saveLabels();
             this.renderLabels();
-            document.getElementById('edit-modal').classList.add('hidden');
-            Utils.showToast('Изменения сохранены');
+            this.closeEditModal();
         },
-        
-        duplicateLabelWithEdit(id) {
-            const label = this.labels.find(l => l.id === id);
-            if (!label) return;
-            
-            this.openEditModal(id);
-            
-            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
-            
-            if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
-            
-            this.duplicateOriginalId = id;
-            
-            const form = document.getElementById('edit-form');
-            const originalSubmit = form.onsubmit;
-            
-            form.onsubmit = (e) => {
-                e.preventDefault();
-                this.duplicateLabelFromEdit();
-            };
-            
-            const originalClose = document.getElementById('modal-close').onclick;
-            const closeBtn = document.getElementById('modal-close');
-            const cancelBtn = document.getElementById('btn-cancel-edit');
-            
-            const restoreHandler = () => {
-                if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
-                form.onsubmit = originalSubmit;
-                closeBtn.onclick = originalClose;
-                cancelBtn.onclick = null;
-                this.duplicateOriginalId = null;
-            };
-            
-            closeBtn.onclick = restoreHandler;
-            cancelBtn.onclick = restoreHandler;
-        },
-        
-        duplicateLabelFromEdit() {
-            const form = document.getElementById('edit-form');
-            const formData = new FormData(form);
-            
-            if (!this.duplicateOriginalId) return;
-            
-            const originalLabel = this.labels.find(l => l.id === this.duplicateOriginalId);
-            if (!originalLabel) return;
-            
-            const barcode = formData.get('barcode');
-            const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-            
-            const newLabel = {
-                id: Utils.generateId(),
-                article: formData.get('article'),
-                barcode: barcode,
-                barcodeFormat: barcodeFormat,
-                color: formData.get('color'),
-                size: formData.get('size'),
-                name: formData.get('name'),
-                seller: formData.get('seller'),
-                gtin: formData.get('gtin'),
-                brand: formData.get('brand'),
-                expiry: formData.get('expiry'),
-                country: formData.get('country'),
-                composition: formData.get('composition'),
-                manufacturer: formData.get('manufacturer'),
-                quantity: parseInt(formData.get('quantity')) || 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            this.labels.push(newLabel);
-            this.saveLabels();
-            this.renderLabels();
-            
-            document.getElementById('edit-modal').classList.add('hidden');
-            Utils.showToast('Этикетка дублирована');
-            
-            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
-            if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
-        },
-        
-        duplicateLabel(id) {
-            const label = this.labels.find(l => l.id === id);
-            if (!label) return;
-            
-            const newLabel = {
-                ...label,
-                id: Utils.generateId(),
-                quantity: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            this.labels.push(newLabel);
-            this.saveLabels();
-            this.renderLabels();
-            Utils.showToast('Этикетка дублирована');
-        },
-        
+
         duplicateSelected() {
             const newLabels = [];
             this.selectedLabels.forEach(id => {
@@ -1077,65 +1035,67 @@ const PDFGenerator = {
                     });
                 }
             });
-            
+
             this.labels.push(...newLabels);
             this.saveLabels();
             this.selectedLabels.clear();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast(`Дублировано: ${newLabels.length}`);
+            Utils.showToast(`Дублировано: ${newLabels.length}`, 'success');
         },
-        
+
         deleteLabel(id) {
             if (!confirm('Удалить эту этикетку?')) return;
-            
+
             this.labels = this.labels.filter(l => l.id !== id);
             this.selectedLabels.delete(id);
             this.saveLabels();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast('Этикетка удалена');
+            Utils.showToast('Этикетка удалена', 'success');
         },
-        
+
         deleteSelected() {
             if (!confirm(`Удалить выбранные этикетки (${this.selectedLabels.size})?`)) return;
-            
+
             this.labels = this.labels.filter(l => !this.selectedLabels.has(l.id));
             this.selectedLabels.clear();
             this.saveLabels();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast('Этикетки удалены');
+            Utils.showToast('Этикетки удалены', 'success');
         },
-        
+
+        // ==================== ИМПОРТ КОЛИЧЕСТВА ====================
         showQuantityImportModal() {
             document.getElementById('quantity-import-modal').classList.remove('hidden');
         },
-        
+
         initQuantityImport() {
             const dropZone = document.getElementById('quantity-drop-zone');
             const fileInput = document.getElementById('quantity-file-input');
             const btnSelectFile = document.getElementById('quantity-btn-select-file');
             const btnCancel = document.getElementById('quantity-btn-cancel');
             const btnConfirm = document.getElementById('quantity-btn-confirm');
-            
+            const modalClose = document.getElementById('quantity-import-modal-close');
+
             btnSelectFile.addEventListener('click', () => fileInput.click());
-            
+
             fileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
                     this.handleQuantityFile(e.target.files[0]);
                 }
             });
-            
+
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropZone.classList.add('dragover');
             });
-            
+
             dropZone.addEventListener('dragleave', () => {
                 dropZone.classList.remove('dragover');
             });
-            
+
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropZone.classList.remove('dragover');
@@ -1143,17 +1103,22 @@ const PDFGenerator = {
                     this.handleQuantityFile(e.dataTransfer.files[0]);
                 }
             });
-            
+
             btnCancel.addEventListener('click', () => {
                 document.getElementById('quantity-import-modal').classList.add('hidden');
                 this.importQuantityData = null;
             });
-            
+
+            modalClose.addEventListener('click', () => {
+                document.getElementById('quantity-import-modal').classList.add('hidden');
+                this.importQuantityData = null;
+            });
+
             btnConfirm.addEventListener('click', () => {
                 this.applyQuantityImport();
             });
         },
-        
+
         handleQuantityFile(file) {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -1162,60 +1127,60 @@ const PDFGenerator = {
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                    
-                    const hasArticle = jsonData.some(row => 
+
+                    const hasArticle = jsonData.some(row =>
                         row.hasOwnProperty('Артикул') || row.hasOwnProperty('article') || row.hasOwnProperty('Article')
                     );
-                    const hasQuantity = jsonData.some(row => 
+                    const hasQuantity = jsonData.some(row =>
                         row.hasOwnProperty('Количество') || row.hasOwnProperty('quantity') || row.hasOwnProperty('Quantity')
                     );
-                    
+
                     if (!hasArticle || !hasQuantity) {
-                        Utils.showToast('Файл должен содержать колонки "Артикул" и "Количество"');
+                        Utils.showToast('Файл должен содержать колонки "Артикул" и "Количество"', 'error');
                         return;
                     }
-                    
+
                     this.importQuantityData = jsonData;
                     this.showQuantityImportPreview(jsonData);
                 } catch (error) {
-                    Utils.showToast('Ошибка чтения файла: ' + error.message);
+                    Utils.showToast('Ошибка чтения файла: ' + error.message, 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
         },
-        
+
         showQuantityImportPreview(data) {
             document.getElementById('quantity-drop-zone').classList.add('hidden');
             document.getElementById('quantity-import-preview').classList.remove('hidden');
-            
+
             const thead = document.getElementById('quantity-preview-thead');
             const tbody = document.getElementById('quantity-preview-tbody');
-            
+
             if (data.length === 0) return;
-            
+
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
-            
+
             tbody.innerHTML = data.slice(0, 10).map(row => {
                 return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
             }).join('');
-            
+
             const count = data.length;
             document.getElementById('quantity-import-count').textContent = `Найдено записей: ${count}`;
         },
-        
+
         applyQuantityImport() {
             if (!this.importQuantityData || this.importQuantityData.length === 0) {
-                Utils.showToast('Нет данных для импорта');
+                Utils.showToast('Нет данных для импорта', 'error');
                 return;
             }
-            
+
             let updatedCount = 0;
-            
+
             this.importQuantityData.forEach(row => {
                 const article = row['Артикул'] || row['article'] || row['Article'];
                 const quantity = parseInt(row['Количество'] || row['quantity'] || row['Quantity'] || 0);
-                
+
                 if (article) {
                     const label = this.labels.find(l => l.article === article);
                     if (label) {
@@ -1225,16 +1190,17 @@ const PDFGenerator = {
                     }
                 }
             });
-            
+
             this.saveLabels();
             this.renderLabels();
-            
+
             document.getElementById('quantity-import-modal').classList.add('hidden');
             this.importQuantityData = null;
-            
-            Utils.showToast(`Обновлено количество у ${updatedCount} этикеток`);
+
+            Utils.showToast(`Обновлено количество у ${updatedCount} этикеток`, 'success');
         },
-        
+
+        // ==================== ПЕЧАТЬ ====================
         updatePrintPreview() {
             const preview = document.getElementById('label-preview');
             const format = document.getElementById('print-barcode-format').value;
@@ -1243,41 +1209,41 @@ const PDFGenerator = {
             const barcodeOnly = document.getElementById('print-barcode-only').checked;
             const noBarcode = document.getElementById('print-no-barcode').checked;
             const printType = document.getElementById('print-type').value;
-            
-            const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0 
-                ? this.labelsForPrint[0] 
+
+            const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0
+                ? this.labelsForPrint[0]
                 : (this.selectedLabels.size > 0 ? Array.from(this.selectedLabels)[0] : null);
             const label = firstSelectedId ? this.labels.find(l => l.id === firstSelectedId) : this.labels[0];
-            
+
             if (!label) {
                 preview.innerHTML = '<p>Нет данных для предпросмотра</p>';
                 return;
             }
-            
+
             let html = '<div class="preview-label" style="';
             html += `font-size: ${textSize}pt; `;
             html += centerText ? 'text-align: center;' : 'text-align: left;';
             html += `border: 1px solid #ddd; padding: 10px; max-width: 300px;`;
             html += '">';
-            
+
             if (!barcodeOnly && !noBarcode) {
                 html += `<div class="preview-barcode" id="preview-barcode-svg"></div>`;
                 html += `<div class="preview-barcode-text">${Utils.escapeHtml(label.barcode)}</div>`;
             }
-            
+
             if (!barcodeOnly) {
                 html += `<div class="preview-article"><strong>Артикул:</strong> ${Utils.escapeHtml(label.article)}</div>`;
-                
+
                 if (label.name) {
                     html += `<div class="preview-name">${Utils.escapeHtml(label.name)}</div>`;
                 }
-                
+
                 const colorSizeRow = document.getElementById('print-color-size-row').checked;
                 if (colorSizeRow) {
                     if (label.color || label.size) {
                         html += `<div class="preview-color-size">`;
                         if (label.color) html += `Цвет: ${Utils.escapeHtml(label.color)}`;
-                        if (label.color && label.size) html += ' | ';
+                        if (label.color && label.size) html += ' / ';
                         if (label.size) html += `Размер: ${Utils.escapeHtml(label.size)}`;
                         html += `</div>`;
                     }
@@ -1285,27 +1251,27 @@ const PDFGenerator = {
                     if (label.color) html += `<div class="preview-color">Цвет: ${Utils.escapeHtml(label.color)}</div>`;
                     if (label.size) html += `<div class="preview-size">Размер: ${Utils.escapeHtml(label.size)}</div>`;
                 }
-                
+
                 if (label.seller) html += `<div class="preview-seller">${Utils.escapeHtml(label.seller)}</div>`;
                 if (label.gtin) html += `<div class="preview-gtin">GTIN: ${Utils.escapeHtml(label.gtin)}</div>`;
                 if (label.brand) html += `<div class="preview-brand"><strong>Бренд:</strong> ${Utils.escapeHtml(label.brand)}</div>`;
             }
-            
+
             html += '</div>';
-            
+
             if (printType === 'a4') {
                 html += '<div style="margin-top: 10px; font-size: 12px; color: #666;">📄 Формат: A4 (несколько этикеток на листе)</div>';
             } else {
                 html += '<div style="margin-top: 10px; font-size: 12px; color: #666;">🏷️ Формат: Термоэтикетка (1 этикетка = 1 страница)</div>';
             }
-            
+
             preview.innerHTML = html;
-            
+
             if (!barcodeOnly && !noBarcode) {
                 setTimeout(() => {
                     try {
                         JsBarcode("#preview-barcode-svg", label.barcode, {
-                            format: format,
+                            format: format === 'auto' ? Utils.detectBarcodeFormat(label.barcode) : format,
                             width: 1.5,
                             height: 40,
                             displayValue: false,
@@ -1317,7 +1283,7 @@ const PDFGenerator = {
                 }, 100);
             }
         },
-        
+
         async printLabels() {
             const printType = document.getElementById('print-type').value;
             const labelSize = document.getElementById('print-label-size').value;
@@ -1327,7 +1293,8 @@ const PDFGenerator = {
             const barcodeOnly = document.getElementById('print-barcode-only').checked;
             const noBarcode = document.getElementById('print-no-barcode').checked;
             const colorSizeRow = document.getElementById('print-color-size-row').checked;
-            
+            const gap = document.getElementById('print-gap') ? document.getElementById('print-gap').value : 5;
+
             let labelsToPrint = [];
             if (this.labelsForPrint && this.labelsForPrint.length > 0) {
                 labelsToPrint = this.labels.filter(l => this.labelsForPrint.includes(l.id));
@@ -1336,40 +1303,50 @@ const PDFGenerator = {
             } else {
                 labelsToPrint = this.labels;
             }
-            
+
             if (labelsToPrint.length === 0) {
-                Utils.showToast('Нет этикеток для печати');
+                Utils.showToast('Нет этикеток для печати', 'error');
                 return;
             }
-            
+
+            // Разворачиваем по количеству
             const expandedLabels = [];
             labelsToPrint.forEach(label => {
                 const qty = label.quantity || 1;
                 for (let i = 0; i < qty; i++) {
-                    expandedLabels.push(label);
+                    expandedLabels.push({ ...label });
                 }
             });
-            
+
             if (expandedLabels.length === 0) {
-                Utils.showToast('Нет этикеток для печати (установите количество > 0)');
+                Utils.showToast('Нет этикеток для печати (установите количество > 0)', 'error');
                 return;
             }
-            
-            const settings = {
-                printType,
-                labelSize,
-                barcodeFormat,
-                textSize,
-                centerText,
-                barcodeOnly,
-                noBarcode,
-                colorSizeRow
-            };
-            
-            Utils.showToast('Генерация PDF...');
-            await PDFGenerator.generateLabelsPDF(expandedLabels, settings);
+
+            Utils.showToast('Генерация PDF... Пожалуйста, подождите', 'info');
+
+            try {
+                const settings = {
+                    printType,
+                    labelSize,
+                    barcodeFormat,
+                    textSize,
+                    centerText,
+                    barcodeOnly,
+                    noBarcode,
+                    colorSizeRow,
+                    gap
+                };
+
+                await PDFGenerator.generateLabelsPDF(expandedLabels, settings);
+                Utils.showToast('✅ PDF успешно создан и скачан!', 'success');
+            } catch (error) {
+                console.error('Ошибка генерации PDF:', error);
+                Utils.showToast('❌ Ошибка при создании PDF: ' + error.message, 'error');
+            }
         },
-        
+
+        // ==================== ИМПОРТ/ЭКСПОРТ ====================
         initImport() {
             const dropZone = document.getElementById('drop-zone');
             const fileInput = document.getElementById('file-input');
@@ -1377,24 +1354,24 @@ const PDFGenerator = {
             const btnCancelImport = document.getElementById('btn-cancel-import');
             const btnConfirmImport = document.getElementById('btn-confirm-import');
             const btnDownloadTemplate = document.getElementById('btn-download-template');
-            
+
             btnSelectFile.addEventListener('click', () => fileInput.click());
-            
+
             fileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
                     this.handleFile(e.target.files[0]);
                 }
             });
-            
+
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropZone.classList.add('dragover');
             });
-            
+
             dropZone.addEventListener('dragleave', () => {
                 dropZone.classList.remove('dragover');
             });
-            
+
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropZone.classList.remove('dragover');
@@ -1402,22 +1379,22 @@ const PDFGenerator = {
                     this.handleFile(e.dataTransfer.files[0]);
                 }
             });
-            
+
             btnCancelImport.addEventListener('click', () => {
                 document.getElementById('import-preview').classList.add('hidden');
                 document.getElementById('drop-zone').classList.remove('hidden');
                 fileInput.value = '';
             });
-            
+
             btnConfirmImport.addEventListener('click', () => {
                 this.confirmImport();
             });
-            
+
             btnDownloadTemplate.addEventListener('click', () => {
                 this.downloadTemplate();
             });
         },
-        
+
         handleFile(file) {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -1426,40 +1403,50 @@ const PDFGenerator = {
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                    
+
                     this.importData = jsonData;
                     this.showImportPreview(jsonData);
                 } catch (error) {
-                    Utils.showToast('Ошибка чтения файла: ' + error.message);
+                    Utils.showToast('Ошибка чтения файла: ' + error.message, 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
         },
-        
+
         showImportPreview(data) {
             document.getElementById('drop-zone').classList.add('hidden');
             document.getElementById('import-preview').classList.remove('hidden');
-            
+
             const thead = document.getElementById('preview-thead');
             const tbody = document.getElementById('preview-tbody');
-            
+
             if (data.length === 0) return;
-            
+
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
-            
+
             tbody.innerHTML = data.slice(0, 10).map(row => {
                 return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
             }).join('');
         },
-        
+
         confirmImport() {
             if (!this.importData || this.importData.length === 0) return;
-            
+
             const newLabels = this.importData.map(row => {
                 const barcode = String(row['Штрихкод'] || row['barcode'] || row['Баркод'] || '');
                 const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-                
+
+                // ВАЖНО: Проверяем разные варианты названия колонки продавца
+                const seller = String(
+                    row['Наименование продавца'] ||
+                    row['Наименование поставщика'] ||
+                    row['Продавец'] ||
+                    row['Поставщик'] ||
+                    row['seller'] ||
+                    ''
+                );
+
                 return {
                     id: Utils.generateId(),
                     article: String(row['Артикул'] || row['article'] || ''),
@@ -1468,7 +1455,7 @@ const PDFGenerator = {
                     color: String(row['Цвет'] || row['color'] || ''),
                     size: String(row['Размер'] || row['size'] || ''),
                     name: String(row['Название товара'] || row['name'] || ''),
-                    seller: String(row['Наименование продавца'] || row['Наименование поставщика'] || row['seller'] || row['Продавец'] || row['Поставщик'] || ''),
+                    seller: seller,
                     gtin: String(row['GTIN'] || row['gtin'] || ''),
                     brand: String(row['Бренд'] || row['brand'] || ''),
                     expiry: String(row['Срок годности'] || row['expiry'] || ''),
@@ -1480,21 +1467,21 @@ const PDFGenerator = {
                     updatedAt: new Date().toISOString()
                 };
             }).filter(label => label.article && label.barcode);
-            
+
             this.labels.push(...newLabels);
             this.saveLabels();
             this.renderLabels();
-            
-            Utils.showToast(`Импортировано: ${newLabels.length} этикеток`);
-            
+
+            Utils.showToast(`Импортировано: ${newLabels.length} этикеток`, 'success');
+
             document.getElementById('import-preview').classList.add('hidden');
             document.getElementById('drop-zone').classList.remove('hidden');
             document.getElementById('file-input').value = '';
             this.importData = null;
-            
+
             this.navigate('labels');
         },
-        
+
         downloadTemplate() {
             const template = [{
                 'Артикул': 'ART001',
@@ -1502,35 +1489,35 @@ const PDFGenerator = {
                 'Цвет': 'белый',
                 'Размер': 'XL',
                 'Название товара': 'Футболка мужская',
-                'Наименование продавца': 'ООО "Пример"',
+                'Наименование поставщика': 'ООО "ТД Нева"',
                 'GTIN': '04601234567890',
                 'Количество': 10,
                 'Бренд': 'Brand',
-                'Срок годности': '',
+                'Срок годности': '24 мес',
                 'Страна производства': 'Россия',
                 'Состав': '100% хлопок',
                 'Производитель': 'ООО "Производитель"'
             }];
-            
+
             const ws = XLSX.utils.json_to_sheet(template);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Этикетки');
             XLSX.writeFile(wb, 'template_labels.xlsx');
         },
-        
+
         exportToExcel() {
             if (this.labels.length === 0) {
-                Utils.showToast('Нет данных для экспорта');
+                Utils.showToast('Нет данных для экспорта', 'warning');
                 return;
             }
-            
+
             const exportData = this.labels.map(label => ({
                 'Артикул': label.article,
                 'Штрихкод': label.barcode,
                 'Цвет': label.color || '',
                 'Размер': label.size || '',
                 'Название товара': label.name || '',
-                'Наименование продавца': label.seller || '',
+                'Наименование поставщика': label.seller || '',
                 'GTIN': label.gtin || '',
                 'Количество': label.quantity || 0,
                 'Бренд': label.brand || '',
@@ -1541,16 +1528,17 @@ const PDFGenerator = {
                 'Создана': label.createdAt,
                 'Изменена': label.updatedAt || label.createdAt
             }));
-            
+
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Этикетки');
             XLSX.writeFile(wb, `labels_export_${new Date().toISOString().split('T')[0]}.xlsx`);
-            
-            Utils.showToast('Экспорт завершен');
+
+            Utils.showToast('Экспорт завершен', 'success');
         }
     };
 
+    // Добавляем стили для анимации toast
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideIn {
@@ -1564,6 +1552,7 @@ const PDFGenerator = {
     `;
     document.head.appendChild(style);
 
+    // Запуск приложения
     document.addEventListener('DOMContentLoaded', () => {
         App.init();
     });
