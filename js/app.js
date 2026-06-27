@@ -240,228 +240,284 @@
         }
     };
 
-    // ==================== ГЕНЕРАЦИЯ PDF ====================
-    const PDFGenerator = {
-        async generateLabelsPDF(labels, settings) {
-            const { jsPDF } = window.jspdf;
-            
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4',
-                compress: true
+    // ==================== ГЕНЕРАЦИЯ PDF (PDFmake) ====================
+const PDFGenerator = {
+    async generateLabelsPDF(labels, settings) {
+        const printType = settings.printType || 'thermal';
+        const labelSize = settings.labelSize || '58x38.6';
+        const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+        const gap = parseInt(settings.gap) || 5;
+        const fontSize = parseInt(settings.textSize) || 10;
+        const centerText = settings.centerText !== false;
+        const barcodeOnly = settings.barcodeOnly || false;
+        const noBarcode = settings.noBarcode || false;
+        const colorSizeRow = settings.colorSizeRow || false;
+
+        // Конвертируем размер шрифта из pt в единицы pdfmake (по умолчанию pt)
+        const fs = fontSize;
+        const fsSmall = Math.max(6, fontSize - 3);
+        const lineHeight = fontSize * 1.2;
+
+        // Генерируем штрихкоды как изображения
+        const barcodeImages = await this.generateBarcodeImages(labels, settings);
+
+        const docDefinition = {
+            pageSize: 'A4',
+            pageMargins: [5, 5, 5, 5],
+            content: []
+        };
+
+        if (printType === 'thermal') {
+            // Термоэтикетка — каждая на отдельной странице
+            labels.forEach((label, index) => {
+                if (index > 0) {
+                    docDefinition.content.push({ text: '', pageBreak: 'before' });
+                }
+                
+                const labelContent = this.buildLabelContent(
+                    label, barcodeImages[index], settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow
+                );
+                
+                docDefinition.content.push({
+                    table: {
+                        widths: [labelWidth + 'mm'],
+                        body: [[{
+                            stack: labelContent,
+                            alignment: centerText ? 'center' : 'left',
+                            margin: [2, 2, 2, 2]
+                        }]]
+                    },
+                    layout: 'noBorders'
+                });
             });
+        } else {
+            // A4 — несколько этикеток на странице
+            const pageWidth = 210;
+            const pageHeight = 297;
+            const cols = Math.floor((pageWidth - gap) / (labelWidth + gap));
+            const rows = Math.floor((pageHeight - gap) / (labelHeight + gap));
             
-            // Загружаем шрифт с поддержкой кириллицы
-            try {
-                const fontData = await this.loadCyrillicFont();
-                pdf.addFileToVFS('Arial Cyr.ttf', fontData);
-                pdf.addFont('Arial Cyr.ttf', 'Arial Cyr', 'normal');
-                pdf.setFont('Arial Cyr');
-            } catch (error) {
-                console.error('Ошибка загрузки шрифта:', error);
-                Utils.showToast('Внимание: могут быть проблемы с отображением кириллицы');
-            }
+            let labelIndex = 0;
             
-            const printType = settings.printType || 'thermal';
-            const labelSize = settings.labelSize || '58x38.6';
-            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const gap = parseInt(settings.gap) || 5;
-            
-            if (printType === 'thermal') {
-                for (let i = 0; i < labels.length; i++) {
-                    if (i > 0) {
-                        pdf.addPage([labelWidth, labelHeight]);
+            while (labelIndex < labels.length) {
+                const pageLabels = [];
+                for (let row = 0; row < rows && labelIndex < labels.length; row++) {
+                    const pageRow = [];
+                    for (let col = 0; col < cols && labelIndex < labels.length; col++) {
+                        const labelContent = this.buildLabelContent(
+                            labels[labelIndex], barcodeImages[labelIndex], settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow
+                        );
+                        pageRow.push({
+                            stack: labelContent,
+                            alignment: centerText ? 'center' : 'left',
+                            margin: [1, 1, 1, 1],
+                            width: labelWidth + 'mm'
+                        });
+                        labelIndex++;
                     }
-                    this.drawLabelOnPDF(pdf, labels[i], settings, 0, 0, labelWidth, labelHeight);
+                    // Дополняем пустыми ячейками если нужно
+                    while (pageRow.length < cols) {
+                        pageRow.push({ text: '', width: labelWidth + 'mm' });
+                    }
+                    pageLabels.push(pageRow);
                 }
-            } else {
-                const pageWidth = 210;
-                const pageHeight = 297;
                 
-                const cols = Math.floor((pageWidth - gap) / (labelWidth + gap));
-                const rows = Math.floor((pageHeight - gap) / (labelHeight + gap));
-                
-                let currentPage = 0;
-                let labelIndex = 0;
-                
-                while (labelIndex < labels.length) {
-                    if (currentPage > 0) {
-                        pdf.addPage('a4');
+                docDefinition.content.push({
+                    table: {
+                        widths: Array(cols).fill(labelWidth + 'mm'),
+                        body: pageLabels
+                    },
+                    layout: {
+                        hLineWidth: () => 0,
+                        vLineWidth: () => 0,
+                        hLineColor: () => '#ccc',
+                        vLineColor: () => '#ccc',
+                        paddingLeft: () => 1,
+                        paddingRight: () => 1,
+                        paddingTop: () => 1,
+                        paddingBottom: () => 1
                     }
-                    
-                    for (let row = 0; row < rows && labelIndex < labels.length; row++) {
-                        for (let col = 0; col < cols && labelIndex < labels.length; col++) {
-                            const x = col * (labelWidth + gap) + gap / 2;
-                            const y = row * (labelHeight + gap) + gap / 2;
-                            this.drawLabelOnPDF(pdf, labels[labelIndex], settings, x, y, labelWidth, labelHeight);
-                            labelIndex++;
-                        }
-                    }
-                    currentPage++;
+                });
+                
+                if (labelIndex < labels.length) {
+                    docDefinition.content.push({ text: '', pageBreak: 'before' });
                 }
             }
+        }
+
+        // Генерируем PDF
+        try {
+            pdfMake.createPdf(docDefinition).download(`labels_${new Date().toISOString().split('T')[0]}.pdf`);
+            return true;
+        } catch (error) {
+            console.error('Ошибка генерации PDF:', error);
+            throw error;
+        }
+    },
+
+    buildLabelContent(label, barcodeImage, settings, fs, fsSmall, lineHeight, centerText, barcodeOnly, noBarcode, colorSizeRow) {
+        const content = [];
+        const align = centerText ? 'center' : 'left';
+
+        // Штрихкод
+        if (!barcodeOnly && !noBarcode && barcodeImage) {
+            content.push({
+                image: barcodeImage,
+                width: 50, // мм
+                height: 20,
+                alignment: align,
+                margin: [0, 0, 0, 2]
+            });
+            content.push({
+                text: label.barcode,
+                fontSize: fsSmall,
+                alignment: align,
+                margin: [0, 0, 0, 2]
+            });
+        }
+
+        if (barcodeOnly) return content;
+
+        // Артикул
+        content.push({
+            text: `Артикул: ${label.article}`,
+            fontSize: fs,
+            bold: true,
+            alignment: align,
+            margin: [0, 0, 0, 1]
+        });
+
+        // Название товара
+        if (label.name) {
+            content.push({
+                text: label.name,
+                fontSize: fs,
+                alignment: align,
+                margin: [0, 0, 0, 1]
+            });
+        }
+
+        // Цвет и размер
+        if (colorSizeRow) {
+            let colorSizeText = '';
+            if (label.color) colorSizeText += `Цвет: ${label.color}`;
+            if (label.color && label.size) colorSizeText += ' / ';
+            if (label.size) colorSizeText += `Разм.: ${label.size}`;
             
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-            pdf.save(`labels_${timestamp}.pdf`);
-        },
-        
-        async loadCyrillicFont() {
-            // Используем base64 закодированный шрифт Arial с поддержкой кириллицы
-            // Это упрощенная версия - в продакшене лучше загрузить реальный шрифт
-            const response = await fetch('https://raw.githubusercontent.com/SheetJS/js-xlsx/master/misc/font/arial.ttf');
-            const buffer = await response.arrayBuffer();
-            return this.arrayBufferToBase64(buffer);
-        },
-        
-        arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
+            if (colorSizeText) {
+                content.push({
+                    text: colorSizeText,
+                    fontSize: fs,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
             }
-            return window.btoa(binary);
-        },
-        
-        drawLabelOnPDF(pdf, label, settings, x, y, width, height) {
-            const fontSize = parseInt(settings.textSize) || 10;
-            const centerText = settings.centerText !== false;
-            const barcodeOnly = settings.barcodeOnly || false;
-            const noBarcode = settings.noBarcode || false;
-            const colorSizeRow = settings.colorSizeRow || false;
-            const barcodeFormat = settings.barcodeFormat || 'auto';
-            
+        } else {
+            if (label.color) {
+                content.push({
+                    text: `Цвет: ${label.color}`,
+                    fontSize: fs,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+            if (label.size) {
+                content.push({
+                    text: `Размер: ${label.size}`,
+                    fontSize: fs,
+                    alignment: align,
+                    margin: [0, 0, 0, 1]
+                });
+            }
+        }
+
+        // Продавец
+        if (label.seller) {
+            content.push({
+                text: label.seller,
+                fontSize: fs,
+                alignment: align,
+                margin: [0, 0, 0, 1]
+            });
+        }
+
+        // GTIN
+        if (label.gtin) {
+            content.push({
+                text: `GTIN: ${label.gtin}`,
+                fontSize: fs,
+                alignment: align,
+                margin: [0, 0, 0, 1]
+            });
+        }
+
+        // Бренд
+        if (label.brand) {
+            content.push({
+                text: `Бренд: ${label.brand}`,
+                fontSize: fs,
+                bold: true,
+                alignment: align,
+                margin: [0, 0, 0, 1]
+            });
+        }
+
+        // Срок годности
+        if (label.expiry) {
+            content.push({
+                text: `Срок годности: ${label.expiry}`,
+                fontSize: fs,
+                alignment: align,
+                margin: [0, 0, 0, 1]
+            });
+        }
+
+        return content;
+    },
+
+    async generateBarcodeImages(labels, settings) {
+        const images = [];
+        const barcodeFormat = settings.barcodeFormat || 'auto';
+
+        for (const label of labels) {
             let format = barcodeFormat;
             if (barcodeFormat === 'auto') {
-                format = Utils.detectBarcodeFormat(label.barcode);
+                format = this.detectBarcodeFormat(label.barcode);
             }
-            
-            pdf.setFontSize(fontSize);
-            pdf.setTextColor(0, 0, 0);
-            
-            let currentY = y + 2;
-            const lineHeight = fontSize * 0.35;
-            
-            if (!barcodeOnly && !noBarcode) {
-                const canvas = document.createElement('canvas');
-                try {
-                    JsBarcode(canvas, label.barcode, {
-                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                        width: 1.5,
-                        height: 20,
-                        displayValue: false,
-                        margin: 0
-                    });
-                    
-                    const imgData = canvas.toDataURL('image/png');
-                    const barcodeWidth = width - 4;
-                    pdf.addImage(imgData, 'PNG', x + 2, currentY, barcodeWidth, 20);
-                    currentY += 22;
-                    
-                    pdf.setFontSize(7);
-                    const barcodeTextX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(label.barcode, barcodeTextX, currentY, centerText ? { align: 'center' } : {});
-                    currentY += 3;
-                    pdf.setFontSize(fontSize);
-                } catch (e) {
-                    console.error('Ошибка генерации штрихкода:', e);
-                }
+
+            const canvas = document.createElement('canvas');
+            try {
+                JsBarcode(canvas, label.barcode, {
+                    format: format === 'EAN13' ? 'EAN13' : 'CODE128',
+                    width: 1.5,
+                    height: 40,
+                    displayValue: false,
+                    margin: 0,
+                    background: '#ffffff',
+                    lineColor: '#000000'
+                });
+                images.push(canvas.toDataURL('image/png'));
+            } catch (e) {
+                console.error('Ошибка генерации штрихкода:', e);
+                images.push(null);
             }
-            
-            if (!barcodeOnly) {
-                pdf.setFont('Arial Cyr', 'bold');
-                const articleText = `Артикул: ${label.article}`;
-                const articleX = centerText ? x + width / 2 : x + 2;
-                pdf.text(articleText, articleX, currentY, centerText ? { align: 'center' } : {});
-                currentY += lineHeight + 1;
-                pdf.setFont('Arial Cyr', 'normal');
-                
-                if (label.name) {
-                    const wrappedName = this.wrapText(label.name, width - 4, fontSize);
-                    const nameX = centerText ? x + width / 2 : x + 2;
-                    wrappedName.forEach(line => {
-                        pdf.text(line, nameX, currentY, centerText ? { align: 'center' } : {});
-                        currentY += lineHeight + 1;
-                    });
-                }
-                
-                if (colorSizeRow) {
-                    let colorSizeText = '';
-                    if (label.color) colorSizeText += `Цвет: ${label.color}`;
-                    if (label.color && label.size) colorSizeText += ' / ';
-                    if (label.size) colorSizeText += `Разм.: ${label.size}`;
-                    
-                    if (colorSizeText) {
-                        const csX = centerText ? x + width / 2 : x + 2;
-                        pdf.text(colorSizeText, csX, currentY, centerText ? { align: 'center' } : {});
-                        currentY += lineHeight + 1;
-                    }
-                } else {
-                    if (label.color) {
-                        const colorX = centerText ? x + width / 2 : x + 2;
-                        pdf.text(`Цвет: ${label.color}`, colorX, currentY, centerText ? { align: 'center' } : {});
-                        currentY += lineHeight + 1;
-                    }
-                    if (label.size) {
-                        const sizeX = centerText ? x + width / 2 : x + 2;
-                        pdf.text(`Размер: ${label.size}`, sizeX, currentY, centerText ? { align: 'center' } : {});
-                        currentY += lineHeight + 1;
-                    }
-                }
-                
-                if (label.seller) {
-                    const sellerX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(label.seller, sellerX, currentY, centerText ? { align: 'center' } : {});
-                    currentY += lineHeight + 1;
-                }
-                
-                if (label.gtin) {
-                    const gtinX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(`GTIN: ${label.gtin}`, gtinX, currentY, centerText ? { align: 'center' } : {});
-                    currentY += lineHeight + 1;
-                }
-                
-                if (label.brand) {
-                    pdf.setFont('Arial Cyr', 'bold');
-                    const brandX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(`Бренд: ${label.brand}`, brandX, currentY, centerText ? { align: 'center' } : {});
-                    pdf.setFont('Arial Cyr', 'normal');
-                    currentY += lineHeight + 1;
-                }
-                
-                if (label.expiry) {
-                    const expiryX = centerText ? x + width / 2 : x + 2;
-                    pdf.text(`Срок годности: ${label.expiry}`, expiryX, currentY, centerText ? { align: 'center' } : {});
-                }
-            }
-        },
-        
-        wrapText(text, maxWidth, fontSize) {
-            const words = text.split(' ');
-            const lines = [];
-            let currentLine = '';
-            const charWidth = fontSize * 0.6 * 0.264583;
-            
-            for (let word of words) {
-                const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                const testWidth = testLine.length * charWidth;
-                
-                if (testWidth > maxWidth && currentLine) {
-                    lines.push(currentLine);
-                    currentLine = word;
-                } else {
-                    currentLine = testLine;
-                }
-            }
-            
-            if (currentLine) {
-                lines.push(currentLine);
-            }
-            
-            return lines;
         }
-    };
+
+        return images;
+    },
+
+    detectBarcodeFormat(barcode) {
+        if (!barcode) return 'CODE128';
+        const cleanBarcode = barcode.replace(/\D/g, '');
+        
+        if (cleanBarcode.length === 13) return 'EAN13';
+        if (cleanBarcode.length === 8) return 'EAN8';
+        if (cleanBarcode.length === 12) return 'UPC';
+        if (barcode.startsWith('*') && barcode.endsWith('*')) return 'CODE39';
+        
+        return 'CODE128';
+    }
+};
 
     // ==================== ПРИЛОЖЕНИЕ ====================
     const App = {
