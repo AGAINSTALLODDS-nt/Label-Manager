@@ -269,27 +269,25 @@
             const docContent = [];
 
             if (printType === 'thermal') {
-                // Термоэтикетка - каждая на отдельной странице
+                // ТЕРМОЭТИКЕТКА - каждая на отдельной странице с точным размером
                 labels.forEach((label, index) => {
-                    if (index > 0) {
-                        docContent.push({ text: '', pageBreak: 'before' });
-                    }
-
                     const labelContent = this.buildLabelContent(
                         label, barcodeImages[index], fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow
                     );
 
+                    // Создаем страницу с точным размером этикетки
                     docContent.push({
-                        table: {
-                            widths: [labelWidth + 'mm'],
-                            body: [[{
-                                stack: labelContent,
-                                alignment: centerText ? 'center' : 'left',
-                                margin: [2, 2, 2, 2]
-                            }]]
-                        },
-                        layout: 'noBorders'
+                        stack: labelContent,
+                        margin: [2, 2, 2, 2]
                     });
+
+                    // Добавляем разрыв страницы если это не последняя этикетка
+                    if (index < labels.length - 1) {
+                        docContent.push({
+                            text: '',
+                            pageBreak: 'after'
+                        });
+                    }
                 });
             } else {
                 // A4 - несколько этикеток на странице
@@ -303,7 +301,7 @@
 
                 while (labelIndex < labels.length) {
                     if (!firstPage) {
-                        docContent.push({ text: '', pageBreak: 'before' });
+                        // Пустой элемент для новой страницы
                     }
                     firstPage = false;
 
@@ -316,22 +314,23 @@
                             );
                             pageRow.push({
                                 stack: labelContent,
-                                alignment: centerText ? 'center' : 'left',
-                                margin: [1, 1, 1, 1]
+                                margin: [1, 1, 1, 1],
+                                width: labelWidth
                             });
                             labelIndex++;
                         }
                         // Дополняем пустыми ячейками
                         while (pageRow.length < cols) {
-                            pageRow.push({ text: '' });
+                            pageRow.push({ text: '', width: labelWidth });
                         }
                         pageLabels.push(pageRow);
                     }
 
                     docContent.push({
                         table: {
-                            widths: Array(cols).fill(labelWidth + 'mm'),
-                            body: pageLabels
+                            widths: Array(cols).fill(labelWidth),
+                            body: pageLabels,
+                            dontBreakRows: true
                         },
                         layout: {
                             hLineWidth: () => 0.5,
@@ -342,16 +341,36 @@
                             paddingRight: () => 2,
                             paddingTop: () => 2,
                             paddingBottom: () => 2
-                        }
+                        },
+                        margin: [0, 0, 0, 0]
                     });
+
+                    if (labelIndex < labels.length) {
+                        docContent.push({
+                            text: '',
+                            pageBreak: 'after'
+                        });
+                    }
                 }
             }
 
+            // Определяем размер страницы
+            let pageSize;
+            if (printType === 'thermal') {
+                pageSize = {
+                    width: labelWidth + 4, // добавляем небольшие поля
+                    height: labelHeight + 4
+                };
+            } else {
+                pageSize = 'A4';
+            }
+
             const docDefinition = {
-                pageSize: 'A4',
-                pageMargins: [5, 5, 5, 5],
+                pageSize: pageSize,
+                pageMargins: [2, 2, 2, 2],
                 defaultStyle: {
-                    font: 'Roboto'
+                    font: 'Roboto',
+                    fontSize: fontSize
                 },
                 content: docContent
             };
@@ -378,13 +397,13 @@
                     width: 50,
                     height: 20,
                     alignment: align,
-                    margin: [0, 0, 0, 2]
+                    margin: [0, 0, 0, 1]
                 });
                 content.push({
                     text: label.barcode,
                     fontSize: Math.max(6, fontSize - 3),
                     alignment: align,
-                    margin: [0, 0, 0, 2]
+                    margin: [0, 0, 0, 1]
                 });
             }
 
@@ -396,7 +415,7 @@
                 fontSize: fontSize,
                 bold: true,
                 alignment: align,
-                margin: [0, 0, 0, 1]
+                margin: [0, 0, 0, 0.5]
             });
 
             // Название товара
@@ -405,7 +424,7 @@
                     text: label.name,
                     fontSize: fontSize,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 0.5]
                 });
             }
 
@@ -421,7 +440,7 @@
                         text: colorSizeText,
                         fontSize: fontSize,
                         alignment: align,
-                        margin: [0, 0, 0, 1]
+                        margin: [0, 0, 0, 0.5]
                     });
                 }
             } else {
@@ -430,7 +449,7 @@
                         text: `Цвет: ${label.color}`,
                         fontSize: fontSize,
                         alignment: align,
-                        margin: [0, 0, 0, 1]
+                        margin: [0, 0, 0, 0.5]
                     });
                 }
                 if (label.size) {
@@ -438,7 +457,7 @@
                         text: `Размер: ${label.size}`,
                         fontSize: fontSize,
                         alignment: align,
-                        margin: [0, 0, 0, 1]
+                        margin: [0, 0, 0, 0.5]
                     });
                 }
             }
@@ -449,7 +468,7 @@
                     text: label.seller,
                     fontSize: fontSize,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 0.5]
                 });
             }
 
@@ -459,7 +478,7 @@
                     text: `GTIN: ${label.gtin}`,
                     fontSize: fontSize,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 0.5]
                 });
             }
 
@@ -470,7 +489,7 @@
                     fontSize: fontSize,
                     bold: true,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 0.5]
                 });
             }
 
@@ -480,7 +499,7 @@
                     text: `Срок годности: ${label.expiry}`,
                     fontSize: fontSize,
                     alignment: align,
-                    margin: [0, 0, 0, 1]
+                    margin: [0, 0, 0, 0.5]
                 });
             }
 
