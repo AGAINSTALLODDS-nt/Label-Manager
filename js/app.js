@@ -24,15 +24,6 @@
             const allLabels = JSON.parse(localStorage.getItem('lm_labels') || '{}');
             allLabels[userId] = labels;
             localStorage.setItem('lm_labels', JSON.stringify(allLabels));
-        },
-        getPrintSettings(userId) {
-            const allSettings = JSON.parse(localStorage.getItem('lm_print_settings') || '{}');
-            return allSettings[userId] || {};
-        },
-        savePrintSettings(userId, settings) {
-            const allSettings = JSON.parse(localStorage.getItem('lm_print_settings') || '{}');
-            allSettings[userId] = settings;
-            localStorage.setItem('lm_print_settings', JSON.stringify(allSettings));
         }
     };
 
@@ -41,50 +32,22 @@
         generateId() {
             return Date.now().toString(36) + Math.random().toString(36).substr(2);
         },
-
-        generateBarcode(format = 'EAN13') {
-            if (format === 'EAN13') {
-                let code = '';
-                for (let i = 0; i < 12; i++) {
-                    code += Math.floor(Math.random() * 10);
-                }
-                let sum = 0;
-                for (let i = 0; i < 12; i++) {
-                    sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
-                }
-                const checkDigit = (10 - (sum % 10)) % 10;
-                return code + checkDigit;
-            } else {
-                let code = '';
-                for (let i = 0; i < 12; i++) {
-                    code += Math.floor(Math.random() * 10);
-                }
-                return code;
-            }
-        },
-
         detectBarcodeFormat(barcode) {
             if (!barcode) return 'CODE128';
-            const cleanBarcode = barcode.replace(/\D/g, '');
-            
-            if (cleanBarcode.length === 13) return 'EAN13';
-            if (cleanBarcode.length === 8) return 'EAN8';
-            if (cleanBarcode.length === 12) return 'UPC';
-            if (barcode.startsWith('*') && barcode.endsWith('*') && barcode.length > 2) return 'CODE39';
-            
+            const clean = barcode.replace(/\D/g, '');
+            if (clean.length === 13) return 'EAN13';
+            if (clean.length === 8) return 'EAN8';
+            if (clean.length === 12) return 'UPC';
             return 'CODE128';
         },
-
         escapeHtml(text) {
-            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         },
-
         copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                this.showToast('Скопировано в буфер обмена');
+                this.showToast('Скопировано');
             }).catch(() => {
                 const textarea = document.createElement('textarea');
                 textarea.value = text;
@@ -92,56 +55,20 @@
                 textarea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textarea);
-                this.showToast('Скопировано в буфер обмена');
+                this.showToast('Скопировано');
             });
         },
-
-        showToast(message, type = 'info') {
+        showToast(message) {
             const toast = document.createElement('div');
-            toast.className = 'toast';
             toast.textContent = message;
-            
-            const colors = {
-                info: 'var(--text)',
-                success: 'var(--success)',
-                error: 'var(--danger)',
-                warning: 'var(--warning)'
-            };
-            
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 24px;
-                right: 24px;
-                background: ${colors[type] || colors.info};
-                color: white;
-                padding: 12px 24px;
-                border-radius: 8px;
-                box-shadow: var(--shadow-lg);
-                z-index: 10000;
-                animation: slideIn 0.3s ease;
-                max-width: 400px;
-            `;
+            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:12px 24px;border-radius:8px;z-index:10000;';
             document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            setTimeout(() => toast.remove(), 3000);
         },
-
         formatDate(dateString) {
             if (!dateString) return '';
-            try {
-                const date = new Date(dateString);
-                return date.toLocaleString('ru-RU', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            } catch (e) {
-                return '';
-            }
+            const date = new Date(dateString);
+            return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
     };
 
@@ -154,386 +81,221 @@
             } else {
                 document.getElementById('auth-screen').classList.remove('hidden');
             }
-
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-
                     const tabName = tab.dataset.tab;
                     document.getElementById('login-form').classList.toggle('hidden', tabName !== 'login');
                     document.getElementById('register-form').classList.toggle('hidden', tabName !== 'register');
-                    document.getElementById('auth-error').classList.add('hidden');
                 });
             });
-
             document.getElementById('login-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.login();
             });
-
             document.getElementById('register-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.register();
             });
-
-            document.getElementById('btn-logout').addEventListener('click', () => {
-                this.logout();
-            });
+            document.getElementById('btn-logout').addEventListener('click', () => this.logout());
         },
-
         login() {
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
-            const errorEl = document.getElementById('auth-error');
-
             const users = Storage.getUsers();
             const user = users.find(u => u.username === username && u.password === password);
-
             if (user) {
                 Storage.setCurrentUser(user);
-                errorEl.classList.add('hidden');
                 App.showMainApp();
             } else {
-                errorEl.textContent = 'Неверный логин или пароль';
-                errorEl.classList.remove('hidden');
+                alert('Неверный логин или пароль');
             }
         },
-
         register() {
             const username = document.getElementById('reg-username').value.trim();
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
-            const errorEl = document.getElementById('auth-error');
-
             if (password !== passwordConfirm) {
-                errorEl.textContent = 'Пароли не совпадают';
-                errorEl.classList.remove('hidden');
+                alert('Пароли не совпадают');
                 return;
             }
-
             const users = Storage.getUsers();
             if (users.find(u => u.username === username)) {
-                errorEl.textContent = 'Пользователь с таким логином уже существует';
-                errorEl.classList.remove('hidden');
+                alert('Пользователь уже существует');
                 return;
             }
-
-            const newUser = {
-                id: Utils.generateId(),
-                username,
-                password,
-                createdAt: new Date().toISOString()
-            };
-
+            const newUser = { id: Utils.generateId(), username, password, createdAt: new Date().toISOString() };
             users.push(newUser);
             Storage.saveUsers(users);
             Storage.setCurrentUser(newUser);
-
-            errorEl.classList.add('hidden');
             App.showMainApp();
         },
-
         logout() {
             localStorage.removeItem('lm_current_user');
-            document.getElementById('app').classList.add('hidden');
-            document.getElementById('auth-screen').classList.remove('hidden');
-            document.getElementById('login-form').reset();
-            document.getElementById('register-form').reset();
+            location.reload();
         }
     };
 
-    // ==================== ГЕНЕРАЦИЯ PDF (PDFmake) ====================
+    // ==================== ГЕНЕРАЦИЯ PDF ====================
     const PDFGenerator = {
         async generateLabelsPDF(labels, settings) {
-            if (typeof window.pdfMake === 'undefined') {
-                Utils.showToast('Библиотека PDF не загружена', 'error');
-                return;
-            }
-
+            const { jsPDF } = window.jspdf;
             const printType = settings.printType || 'thermal';
             const labelSize = settings.labelSize || '58x38.6';
             const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const gap = parseInt(settings.gap) || 5;
-            const fontSize = parseInt(settings.textSize) || 10;
+            
+            // Создаем PDF
+            const pdf = new jsPDF({
+                orientation: labelWidth > labelHeight ? 'landscape' : 'portrait',
+                unit: 'mm',
+                format: [labelWidth, labelHeight],
+                compress: true
+            });
+
+            for (let i = 0; i < labels.length; i++) {
+                if (i > 0) {
+                    pdf.addPage([labelWidth, labelHeight]);
+                }
+                this.drawSingleLabel(pdf, labels[i], settings, labelWidth, labelHeight);
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            pdf.save(`labels_${timestamp}.pdf`);
+        },
+
+        drawSingleLabel(pdf, label, settings, width, height) {
+            const fontSize = parseInt(settings.textSize) || 8;
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
-            const barcodeFormatSetting = settings.barcodeFormat || 'auto';
-
-            // Генерируем изображения штрихкодов
-            const barcodeImages = await this.generateBarcodeImages(labels, barcodeFormatSetting);
-
-            // Собираем содержимое документа
-            const docContent = [];
-
-            if (printType === 'thermal') {
-                // ТЕРМОЭТИКЕТКА - каждая на отдельной странице с точным размером
-                labels.forEach((label, index) => {
-                    const labelContent = this.buildLabelContent(
-                        label, barcodeImages[index], fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow
-                    );
-
-                    // Создаем страницу с точным размером этикетки
-                    docContent.push({
-                        stack: labelContent,
-                        margin: [2, 2, 2, 2]
-                    });
-
-                    // Добавляем разрыв страницы если это не последняя этикетка
-                    if (index < labels.length - 1) {
-                        docContent.push({
-                            text: '',
-                            pageBreak: 'after'
-                        });
-                    }
-                });
-            } else {
-                // A4 - несколько этикеток на странице
-                const pageWidth = 210;
-                const pageHeight = 297;
-                const cols = Math.max(1, Math.floor((pageWidth - gap) / (labelWidth + gap)));
-                const rows = Math.max(1, Math.floor((pageHeight - gap) / (labelHeight + gap)));
-
-                let labelIndex = 0;
-                let firstPage = true;
-
-                while (labelIndex < labels.length) {
-                    if (!firstPage) {
-                        // Пустой элемент для новой страницы
-                    }
-                    firstPage = false;
-
-                    const pageLabels = [];
-                    for (let row = 0; row < rows && labelIndex < labels.length; row++) {
-                        const pageRow = [];
-                        for (let col = 0; col < cols && labelIndex < labels.length; col++) {
-                            const labelContent = this.buildLabelContent(
-                                labels[labelIndex], barcodeImages[labelIndex], fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow
-                            );
-                            pageRow.push({
-                                stack: labelContent,
-                                margin: [1, 1, 1, 1],
-                                width: labelWidth
-                            });
-                            labelIndex++;
-                        }
-                        // Дополняем пустыми ячейками
-                        while (pageRow.length < cols) {
-                            pageRow.push({ text: '', width: labelWidth });
-                        }
-                        pageLabels.push(pageRow);
-                    }
-
-                    docContent.push({
-                        table: {
-                            widths: Array(cols).fill(labelWidth),
-                            body: pageLabels,
-                            dontBreakRows: true
-                        },
-                        layout: {
-                            hLineWidth: () => 0.5,
-                            vLineWidth: () => 0.5,
-                            hLineColor: () => '#cccccc',
-                            vLineColor: () => '#cccccc',
-                            paddingLeft: () => 2,
-                            paddingRight: () => 2,
-                            paddingTop: () => 2,
-                            paddingBottom: () => 2
-                        },
-                        margin: [0, 0, 0, 0]
-                    });
-
-                    if (labelIndex < labels.length) {
-                        docContent.push({
-                            text: '',
-                            pageBreak: 'after'
-                        });
-                    }
-                }
-            }
-
-            // Определяем размер страницы
-            let pageSize;
-            if (printType === 'thermal') {
-                pageSize = {
-                    width: labelWidth + 4, // добавляем небольшие поля
-                    height: labelHeight + 4
-                };
-            } else {
-                pageSize = 'A4';
-            }
-
-            const docDefinition = {
-                pageSize: pageSize,
-                pageMargins: [2, 2, 2, 2],
-                defaultStyle: {
-                    font: 'Roboto',
-                    fontSize: fontSize
-                },
-                content: docContent
-            };
-
-            try {
-                const pdfDoc = pdfMake.createPdf(docDefinition);
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                pdfDoc.download(`labels_${timestamp}.pdf`);
-                return true;
-            } catch (error) {
-                console.error('Ошибка генерации PDF:', error);
-                throw error;
-            }
-        },
-
-        buildLabelContent(label, barcodeImage, fontSize, centerText, barcodeOnly, noBarcode, colorSizeRow) {
-            const content = [];
             const align = centerText ? 'center' : 'left';
+            
+            pdf.setFontSize(fontSize);
+            pdf.setTextColor(0, 0, 0);
+            
+            let currentY = 2;
+            const lineHeight = fontSize * 0.35;
+            const textX = centerText ? width / 2 : 2;
+            const maxWidth = width - 4;
 
             // Штрихкод
-            if (!barcodeOnly && !noBarcode && barcodeImage) {
-                content.push({
-                    image: barcodeImage,
-                    width: 50,
-                    height: 20,
-                    alignment: align,
-                    margin: [0, 0, 0, 1]
-                });
-                content.push({
-                    text: label.barcode,
-                    fontSize: Math.max(6, fontSize - 3),
-                    alignment: align,
-                    margin: [0, 0, 0, 1]
-                });
-            }
-
-            if (barcodeOnly) return content;
-
-            // Артикул
-            content.push({
-                text: `Артикул: ${label.article}`,
-                fontSize: fontSize,
-                bold: true,
-                alignment: align,
-                margin: [0, 0, 0, 0.5]
-            });
-
-            // Название товара
-            if (label.name) {
-                content.push({
-                    text: label.name,
-                    fontSize: fontSize,
-                    alignment: align,
-                    margin: [0, 0, 0, 0.5]
-                });
-            }
-
-            // Цвет и размер
-            if (colorSizeRow) {
-                let colorSizeText = '';
-                if (label.color) colorSizeText += `Цвет: ${label.color}`;
-                if (label.color && label.size) colorSizeText += ' / ';
-                if (label.size) colorSizeText += `Разм.: ${label.size}`;
-
-                if (colorSizeText) {
-                    content.push({
-                        text: colorSizeText,
-                        fontSize: fontSize,
-                        alignment: align,
-                        margin: [0, 0, 0, 0.5]
-                    });
-                }
-            } else {
-                if (label.color) {
-                    content.push({
-                        text: `Цвет: ${label.color}`,
-                        fontSize: fontSize,
-                        alignment: align,
-                        margin: [0, 0, 0, 0.5]
-                    });
-                }
-                if (label.size) {
-                    content.push({
-                        text: `Размер: ${label.size}`,
-                        fontSize: fontSize,
-                        alignment: align,
-                        margin: [0, 0, 0, 0.5]
-                    });
-                }
-            }
-
-            // Продавец
-            if (label.seller) {
-                content.push({
-                    text: label.seller,
-                    fontSize: fontSize,
-                    alignment: align,
-                    margin: [0, 0, 0, 0.5]
-                });
-            }
-
-            // GTIN
-            if (label.gtin) {
-                content.push({
-                    text: `GTIN: ${label.gtin}`,
-                    fontSize: fontSize,
-                    alignment: align,
-                    margin: [0, 0, 0, 0.5]
-                });
-            }
-
-            // Бренд
-            if (label.brand) {
-                content.push({
-                    text: `Бренд: ${label.brand}`,
-                    fontSize: fontSize,
-                    bold: true,
-                    alignment: align,
-                    margin: [0, 0, 0, 0.5]
-                });
-            }
-
-            // Срок годности
-            if (label.expiry) {
-                content.push({
-                    text: `Срок годности: ${label.expiry}`,
-                    fontSize: fontSize,
-                    alignment: align,
-                    margin: [0, 0, 0, 0.5]
-                });
-            }
-
-            return content;
-        },
-
-        async generateBarcodeImages(labels, barcodeFormatSetting) {
-            const images = [];
-
-            for (const label of labels) {
-                let format = barcodeFormatSetting;
-                if (barcodeFormatSetting === 'auto') {
-                    format = Utils.detectBarcodeFormat(label.barcode);
-                }
-
-                const canvas = document.createElement('canvas');
+            if (!barcodeOnly && !noBarcode) {
                 try {
+                    const canvas = document.createElement('canvas');
+                    const format = settings.barcodeFormat === 'auto' ? Utils.detectBarcodeFormat(label.barcode) : settings.barcodeFormat;
                     JsBarcode(canvas, label.barcode, {
                         format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                        width: 1.5,
-                        height: 40,
+                        width: 1.2,
+                        height: 15,
                         displayValue: false,
-                        margin: 0,
-                        background: '#ffffff',
-                        lineColor: '#000000'
+                        margin: 0
                     });
-                    images.push(canvas.toDataURL('image/png'));
+                    const imgData = canvas.toDataURL('image/png');
+                    const barcodeWidth = Math.min(maxWidth, width - 4);
+                    const barcodeX = centerText ? (width - barcodeWidth) / 2 : 2;
+                    pdf.addImage(imgData, 'PNG', barcodeX, currentY, barcodeWidth, 15);
+                    currentY += 16;
+                    
+                    // Текст штрихкода
+                    pdf.setFontSize(6);
+                    pdf.text(label.barcode, textX, currentY, { align });
+                    currentY += 2;
+                    pdf.setFontSize(fontSize);
                 } catch (e) {
-                    console.error('Ошибка генерации штрихкода:', e);
-                    images.push(null);
+                    console.error('Barcode error:', e);
                 }
             }
 
-            return images;
+            if (!barcodeOnly) {
+                // Артикул
+                pdf.setFont(undefined, 'bold');
+                const articleText = `Артикул: ${label.article}`;
+                const wrappedArticle = this.wrapText(pdf, articleText, maxWidth);
+                wrappedArticle.forEach(line => {
+                    pdf.text(line, textX, currentY, { align });
+                    currentY += lineHeight;
+                });
+                pdf.setFont(undefined, 'normal');
+
+                // Название товара
+                if (label.name) {
+                    const wrappedName = this.wrapText(pdf, label.name, maxWidth);
+                    wrappedName.forEach(line => {
+                        pdf.text(line, textX, currentY, { align });
+                        currentY += lineHeight;
+                    });
+                }
+
+                // Цвет и размер
+                if (colorSizeRow) {
+                    let colorSizeText = '';
+                    if (label.color) colorSizeText += `Цвет: ${label.color}`;
+                    if (label.color && label.size) colorSizeText += ' / ';
+                    if (label.size) colorSizeText += `Разм.: ${label.size}`;
+                    if (colorSizeText) {
+                        const wrapped = this.wrapText(pdf, colorSizeText, maxWidth);
+                        wrapped.forEach(line => {
+                            pdf.text(line, textX, currentY, { align });
+                            currentY += lineHeight;
+                        });
+                    }
+                } else {
+                    if (label.color) {
+                        pdf.text(`Цвет: ${label.color}`, textX, currentY, { align });
+                        currentY += lineHeight;
+                    }
+                    if (label.size) {
+                        pdf.text(`Размер: ${label.size}`, textX, currentY, { align });
+                        currentY += lineHeight;
+                    }
+                }
+
+                // Продавец
+                if (label.seller) {
+                    const wrappedSeller = this.wrapText(pdf, label.seller, maxWidth);
+                    wrappedSeller.forEach(line => {
+                        pdf.text(line, textX, currentY, { align });
+                        currentY += lineHeight;
+                    });
+                }
+
+                // Бренд
+                if (label.brand) {
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text(`Бренд: ${label.brand}`, textX, currentY, { align });
+                    pdf.setFont(undefined, 'normal');
+                    currentY += lineHeight;
+                }
+
+                // Срок годности
+                if (label.expiry) {
+                    pdf.text(`Срок годности: ${label.expiry}`, textX, currentY, { align });
+                }
+            }
+        },
+
+        wrapText(pdf, text, maxWidth) {
+            if (!text) return [];
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+            const fontSize = pdf.internal.getFontSize();
+            const charWidth = fontSize * 0.6 * 0.264583;
+
+            for (let word of words) {
+                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                const testWidth = testLine.length * charWidth;
+                if (testWidth > maxWidth && currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            if (currentLine) lines.push(currentLine);
+            return lines;
         }
     };
 
@@ -545,8 +307,6 @@
         currentPage: 'labels',
         currentFilter: '',
         importQuantityData: null,
-        labelsForPrint: [],
-        duplicateOriginalId: null,
 
         init() {
             Auth.init();
@@ -558,56 +318,35 @@
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
             document.getElementById('user-name').textContent = this.currentUser.username;
-
             this.loadLabels();
             this.renderLabels();
             this.updateLabelsCount();
         },
 
         bindEvents() {
-            // Навигация
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.preventDefault();
-                    const page = item.dataset.page;
-                    this.navigate(page);
+                    this.navigate(item.dataset.page);
                 });
             });
 
-            // Добавление этикетки
-            document.getElementById('btn-add-label').addEventListener('click', () => {
-                this.navigate('create');
-            });
-
-            document.getElementById('btn-cancel-create').addEventListener('click', () => {
-                this.navigate('labels');
-            });
-
+            document.getElementById('btn-add-label').addEventListener('click', () => this.navigate('create'));
+            document.getElementById('btn-cancel-create').addEventListener('click', () => this.navigate('labels'));
+            
             document.getElementById('create-label-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.createLabel();
             });
 
-            // Генерация штрихкода
             document.getElementById('btn-generate-barcode').addEventListener('click', () => {
-                const barcodeInput = document.querySelector('#create-label-form input[name="barcode"]');
-                barcodeInput.value = Utils.generateBarcode('EAN13');
-                const formatDisplay = document.getElementById('create-barcode-format-display');
-                if (formatDisplay) {
-                    formatDisplay.textContent = 'EAN13 (сгенерирован)';
-                }
+                const input = document.querySelector('#create-label-form input[name="barcode"]');
+                input.value = Math.floor(Math.random() * 1000000000000).toString().padStart(13, '0');
             });
 
-            // Импорт/Экспорт Excel
-            document.getElementById('btn-import-excel').addEventListener('click', () => {
-                this.navigate('import');
-            });
-
-            document.getElementById('btn-export-excel').addEventListener('click', () => {
-                this.exportToExcel();
-            });
-
-            // Поиск
+            document.getElementById('btn-import-excel').addEventListener('click', () => this.navigate('import'));
+            document.getElementById('btn-export-excel').addEventListener('click', () => this.exportToExcel());
+            
             document.getElementById('search-input').addEventListener('input', (e) => {
                 this.currentFilter = e.target.value.toLowerCase();
                 this.renderLabels();
@@ -619,85 +358,31 @@
                 this.renderLabels();
             });
 
-            // Выбрать все
             document.getElementById('select-all').addEventListener('change', (e) => {
-                const checkboxes = document.querySelectorAll('.label-checkbox');
-                checkboxes.forEach(cb => {
+                document.querySelectorAll('.label-checkbox').forEach(cb => {
                     cb.checked = e.target.checked;
-                    const id = cb.dataset.id;
-                    if (e.target.checked) {
-                        this.selectedLabels.add(id);
-                    } else {
-                        this.selectedLabels.delete(id);
-                    }
+                    if (e.target.checked) this.selectedLabels.add(cb.dataset.id);
+                    else this.selectedLabels.delete(cb.dataset.id);
                 });
                 this.updateBulkActions();
             });
 
-            // Массовые действия
-            document.getElementById('btn-bulk-duplicate').addEventListener('click', () => {
-                this.duplicateSelected();
-            });
+            document.getElementById('btn-bulk-duplicate').addEventListener('click', () => this.duplicateSelected());
+            document.getElementById('btn-bulk-delete').addEventListener('click', () => this.deleteSelected());
+            document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
+            document.getElementById('btn-bulk-print').addEventListener('click', () => this.navigateToPrint());
 
-            document.getElementById('btn-bulk-delete').addEventListener('click', () => {
-                this.deleteSelected();
-            });
+            document.getElementById('modal-close').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
+            document.getElementById('btn-cancel-edit').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
+            document.getElementById('edit-form').addEventListener('submit', (e) => { e.preventDefault(); this.saveEdit(); });
 
-            document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => {
-                this.showQuantityImportModal();
-            });
+            document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
+            document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
 
-            document.getElementById('btn-bulk-print').addEventListener('click', () => {
-                this.navigateToPrint();
-            });
-
-            // Модальное окно редактирования
-            document.getElementById('modal-close').addEventListener('click', () => {
-                this.closeEditModal();
-            });
-
-            document.getElementById('btn-cancel-edit').addEventListener('click', () => {
-                this.closeEditModal();
-            });
-
-            document.getElementById('edit-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveEdit();
-            });
-
-            // Копирование штрихкода
-            document.addEventListener('click', (e) => {
-                if (e.target.classList.contains('btn-copy-barcode')) {
-                    const barcodeInput = e.target.closest('.input-with-btn').querySelector('input');
-                    Utils.copyToClipboard(barcodeInput.value);
-                }
-            });
-
-            // Настройки печати
-            document.getElementById('btn-back-to-labels').addEventListener('click', () => {
-                this.navigate('labels');
-            });
-
-            document.getElementById('btn-print').addEventListener('click', () => {
-                this.printLabels();
-            });
-
-            // Выбор шаблона
-            document.querySelectorAll('.template-card').forEach(card => {
-                card.addEventListener('click', () => {
-                    document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
-                    card.classList.add('selected');
-                });
-            });
-
-            // Обновление превью при изменении настроек
-            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only',
-             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type', 'print-orientation', 'print-gap'].forEach(id => {
+            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only', 
+             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el) {
-                    el.addEventListener('change', () => this.updatePrintPreview());
-                    el.addEventListener('input', () => this.updatePrintPreview());
-                }
+                if (el) el.addEventListener('change', () => this.updatePrintPreview());
             });
 
             this.initImport();
@@ -707,20 +392,12 @@
         navigate(page) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-
             document.getElementById(`page-${page}`).classList.add('active');
             const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
-            if (navItem) {
-                navItem.classList.add('active');
-            }
-
+            if (navItem) navItem.classList.add('active');
             this.currentPage = page;
-
-            if (page === 'labels') {
-                this.renderLabels();
-            } else if (page === 'print') {
-                this.updatePrintPreview();
-            }
+            if (page === 'labels') this.renderLabels();
+            else if (page === 'print') this.updatePrintPreview();
         },
 
         navigateToPrint() {
@@ -744,135 +421,79 @@
         renderLabels() {
             const tbody = document.getElementById('labels-tbody');
             tbody.innerHTML = '';
-
-            let filteredLabels = this.labels;
+            
+            let filtered = this.labels;
             if (this.currentFilter) {
-                filteredLabels = this.labels.filter(label => {
-                    return Object.values(label).some(value =>
-                        String(value || '').toLowerCase().includes(this.currentFilter)
-                    );
-                });
+                filtered = this.labels.filter(l => Object.values(l).some(v => String(v).toLowerCase().includes(this.currentFilter)));
             }
 
-            filteredLabels.forEach(label => {
-                const barcodeFormat = Utils.detectBarcodeFormat(label.barcode);
+            filtered.forEach(label => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td class="col-checkbox">
-                        <input type="checkbox" class="label-checkbox" data-id="${label.id}"
-                            ${this.selectedLabels.has(label.id) ? 'checked' : ''}>
-                    </td>
-                    <td class="col-quantity">
-                        <div class="quantity-control">
-                            <button class="btn-decrease" data-id="${label.id}">−</button>
-                            <input type="number" class="quantity-input" data-id="${label.id}"
-                                value="${label.quantity || 0}" min="0">
-                            <button class="btn-increase" data-id="${label.id}">+</button>
-                        </div>
-                    </td>
-                    <td class="col-barcode">
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <span class="barcode-text">${Utils.escapeHtml(label.barcode)}</span>
-                            <button class="action-btn btn-copy" data-barcode="${Utils.escapeHtml(label.barcode)}" title="Копировать">📋</button>
-                        </div>
-                        <span class="barcode-format-badge">${barcodeFormat}</span>
-                    </td>
-                    <td class="col-article">${Utils.escapeHtml(label.article)}</td>
-                    <td class="col-color">${Utils.escapeHtml(label.color || '')}</td>
-                    <td class="col-size">${Utils.escapeHtml(label.size || '')}</td>
-                    <td class="col-name">${Utils.escapeHtml(label.name || '')}</td>
-                    <td class="col-seller">${Utils.escapeHtml(label.seller || '')}</td>
-                    <td class="col-gtin">${Utils.escapeHtml(label.gtin || '')}</td>
-                    <td class="col-dates">
-                        <div style="font-size: 11px;">
-                            <div>Создана: ${Utils.formatDate(label.createdAt)}</div>
-                            <div>Изменена: ${Utils.formatDate(label.updatedAt || label.createdAt)}</div>
-                        </div>
-                    </td>
-                    <td class="col-actions">
-                        <div class="action-buttons">
-                            <button class="action-btn btn-edit" data-id="${label.id}" title="Редактировать">✏️</button>
-                            <button class="action-btn btn-duplicate" data-id="${label.id}" title="Дублировать">📑</button>
-                            <button class="action-btn delete btn-delete" data-id="${label.id}" title="Удалить">🗑️</button>
-                        </div>
-                    </td>
+                    <td><input type="checkbox" class="label-checkbox" data-id="${label.id}" ${this.selectedLabels.has(label.id) ? 'checked' : ''}></td>
+                    <td><div class="quantity-control">
+                        <button class="btn-decrease" data-id="${label.id}">−</button>
+                        <input type="number" class="quantity-input" data-id="${label.id}" value="${label.quantity || 0}" min="0">
+                        <button class="btn-increase" data-id="${label.id}">+</button>
+                    </div></td>
+                    <td><div>${Utils.escapeHtml(label.barcode)} <button class="action-btn btn-copy" data-barcode="${Utils.escapeHtml(label.barcode)}">📋</button></div>
+                        <span class="barcode-format-badge">${Utils.detectBarcodeFormat(label.barcode)}</span></td>
+                    <td>${Utils.escapeHtml(label.article)}</td>
+                    <td>${Utils.escapeHtml(label.color || '')}</td>
+                    <td>${Utils.escapeHtml(label.size || '')}</td>
+                    <td>${Utils.escapeHtml(label.name || '')}</td>
+                    <td>${Utils.escapeHtml(label.seller || '')}</td>
+                    <td>${Utils.escapeHtml(label.gtin || '')}</td>
+                    <td style="font-size:11px"><div>Создана: ${Utils.formatDate(label.createdAt)}</div><div>Изменена: ${Utils.formatDate(label.updatedAt || label.createdAt)}</div></td>
+                    <td><div class="action-buttons">
+                        <button class="action-btn btn-edit" data-id="${label.id}">✏️</button>
+                        <button class="action-btn btn-duplicate" data-id="${label.id}">📑</button>
+                        <button class="action-btn delete btn-delete" data-id="${label.id}">🗑️</button>
+                    </div></td>
                 `;
                 tbody.appendChild(tr);
             });
 
-            // Обработчики
+            // Event listeners
             document.querySelectorAll('.label-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
-                    const id = e.target.dataset.id;
-                    if (e.target.checked) {
-                        this.selectedLabels.add(id);
-                    } else {
-                        this.selectedLabels.delete(id);
-                    }
+                    if (e.target.checked) this.selectedLabels.add(e.target.dataset.id);
+                    else this.selectedLabels.delete(e.target.dataset.id);
                     this.updateBulkActions();
                 });
             });
 
             document.querySelectorAll('.btn-decrease').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    this.changeQuantity(id, -1);
-                });
+                btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, -1));
             });
-
             document.querySelectorAll('.btn-increase').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    this.changeQuantity(id, 1);
-                });
+                btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, 1));
             });
-
             document.querySelectorAll('.quantity-input').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const id = e.target.dataset.id;
-                    const quantity = parseInt(e.target.value) || 0;
-                    this.updateQuantity(id, quantity);
-                });
+                input.addEventListener('change', (e) => this.updateQuantity(e.target.dataset.id, parseInt(e.target.value) || 0));
             });
-
             document.querySelectorAll('.btn-copy').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const barcode = e.target.dataset.barcode;
-                    Utils.copyToClipboard(barcode);
-                });
+                btn.addEventListener('click', (e) => Utils.copyToClipboard(e.target.dataset.barcode));
             });
-
             document.querySelectorAll('.btn-edit').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    this.openEditModal(id, 'edit');
-                });
+                btn.addEventListener('click', (e) => this.openEditModal(e.target.dataset.id));
             });
-
             document.querySelectorAll('.btn-duplicate').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    this.openEditModal(id, 'duplicate');
-                });
+                btn.addEventListener('click', (e) => this.duplicateLabelWithEdit(e.target.dataset.id));
             });
-
             document.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    this.deleteLabel(id);
-                });
+                btn.addEventListener('click', (e) => this.deleteLabel(e.target.dataset.id));
             });
         },
 
         updateBulkActions() {
-            const bulkActions = document.getElementById('bulk-actions');
+            const bulk = document.getElementById('bulk-actions');
             const count = this.selectedLabels.size;
-
             if (count > 0) {
-                bulkActions.classList.remove('hidden');
+                bulk.classList.remove('hidden');
                 document.getElementById('selected-count').textContent = `Выбрано: ${count}`;
             } else {
-                bulkActions.classList.add('hidden');
+                bulk.classList.add('hidden');
             }
         },
 
@@ -898,15 +519,10 @@
         createLabel() {
             const form = document.getElementById('create-label-form');
             const formData = new FormData(form);
-
-            const barcode = formData.get('barcode');
-            const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-
             const label = {
                 id: Utils.generateId(),
                 article: formData.get('article'),
-                barcode: barcode,
-                barcodeFormat: barcodeFormat,
+                barcode: formData.get('barcode'),
                 color: formData.get('color'),
                 size: formData.get('size'),
                 name: formData.get('name'),
@@ -921,19 +537,16 @@
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
-
             this.labels.push(label);
             this.saveLabels();
-
             form.reset();
-            Utils.showToast('Этикетка создана', 'success');
+            Utils.showToast('Этикетка создана');
             this.navigate('labels');
         },
 
-        openEditModal(id, mode = 'edit') {
+        openEditModal(id) {
             const label = this.labels.find(l => l.id === id);
             if (!label) return;
-
             const form = document.getElementById('edit-form');
             form.querySelector('input[name="id"]').value = label.id;
             form.querySelector('input[name="article"]').value = label.article;
@@ -949,95 +562,83 @@
             form.querySelector('input[name="composition"]').value = label.composition || '';
             form.querySelector('input[name="manufacturer"]').value = label.manufacturer || '';
             form.querySelector('input[name="quantity"]').value = label.quantity || 0;
-
-            const format = Utils.detectBarcodeFormat(label.barcode);
-            const formatDisplay = document.getElementById('edit-barcode-format-display');
-            if (formatDisplay) {
-                formatDisplay.textContent = `Формат: ${format}`;
-            }
-
-            const modalTitle = document.getElementById('edit-modal-title');
-            const submitBtn = document.getElementById('edit-submit-btn');
-
-            if (mode === 'duplicate') {
-                if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
-                if (submitBtn) submitBtn.textContent = 'Дублировать';
-                this.duplicateOriginalId = id;
-            } else {
-                if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
-                if (submitBtn) submitBtn.textContent = 'Сохранить';
-                this.duplicateOriginalId = null;
-            }
-
             document.getElementById('edit-modal').classList.remove('hidden');
-        },
-
-        closeEditModal() {
-            document.getElementById('edit-modal').classList.add('hidden');
-            this.duplicateOriginalId = null;
         },
 
         saveEdit() {
             const form = document.getElementById('edit-form');
             const formData = new FormData(form);
             const id = formData.get('id');
-
-            const labelIndex = this.labels.findIndex(l => l.id === id);
-            if (labelIndex === -1) return;
-
-            const barcode = formData.get('barcode');
-            const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-
-            if (this.duplicateOriginalId) {
-                // Режим дублирования
-                const newLabel = {
-                    id: Utils.generateId(),
-                    article: formData.get('article'),
-                    barcode: barcode,
-                    barcodeFormat: barcodeFormat,
-                    color: formData.get('color'),
-                    size: formData.get('size'),
-                    name: formData.get('name'),
-                    seller: formData.get('seller'),
-                    gtin: formData.get('gtin'),
-                    brand: formData.get('brand'),
-                    expiry: formData.get('expiry'),
-                    country: formData.get('country'),
-                    composition: formData.get('composition'),
-                    manufacturer: formData.get('manufacturer'),
-                    quantity: parseInt(formData.get('quantity')) || 0,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-
-                this.labels.push(newLabel);
-                Utils.showToast('Этикетка дублирована', 'success');
-            } else {
-                // Режим редактирования
-                this.labels[labelIndex] = {
-                    ...this.labels[labelIndex],
-                    article: formData.get('article'),
-                    barcode: barcode,
-                    barcodeFormat: barcodeFormat,
-                    color: formData.get('color'),
-                    size: formData.get('size'),
-                    name: formData.get('name'),
-                    seller: formData.get('seller'),
-                    gtin: formData.get('gtin'),
-                    brand: formData.get('brand'),
-                    expiry: formData.get('expiry'),
-                    country: formData.get('country'),
-                    composition: formData.get('composition'),
-                    manufacturer: formData.get('manufacturer'),
-                    quantity: parseInt(formData.get('quantity')) || 0,
-                    updatedAt: new Date().toISOString()
-                };
-                Utils.showToast('Изменения сохранены', 'success');
-            }
-
+            const idx = this.labels.findIndex(l => l.id === id);
+            if (idx === -1) return;
+            this.labels[idx] = {
+                ...this.labels[idx],
+                article: formData.get('article'),
+                barcode: formData.get('barcode'),
+                color: formData.get('color'),
+                size: formData.get('size'),
+                name: formData.get('name'),
+                seller: formData.get('seller'),
+                gtin: formData.get('gtin'),
+                brand: formData.get('brand'),
+                expiry: formData.get('expiry'),
+                country: formData.get('country'),
+                composition: formData.get('composition'),
+                manufacturer: formData.get('manufacturer'),
+                quantity: parseInt(formData.get('quantity')) || 0,
+                updatedAt: new Date().toISOString()
+            };
             this.saveLabels();
             this.renderLabels();
-            this.closeEditModal();
+            document.getElementById('edit-modal').classList.add('hidden');
+            Utils.showToast('Сохранено');
+        },
+
+        duplicateLabelWithEdit(id) {
+            this.openEditModal(id);
+            document.querySelector('#edit-modal .modal-header h2').textContent = 'Дублировать этикетку';
+            this.duplicateOriginalId = id;
+            const form = document.getElementById('edit-form');
+            const origSubmit = form.onsubmit;
+            form.onsubmit = (e) => { e.preventDefault(); this.duplicateFromEdit(); };
+            const restore = () => {
+                document.querySelector('#edit-modal .modal-header h2').textContent = 'Редактировать этикетку';
+                form.onsubmit = origSubmit;
+                this.duplicateOriginalId = null;
+            };
+            document.getElementById('modal-close').onclick = restore;
+            document.getElementById('btn-cancel-edit').onclick = restore;
+        },
+
+        duplicateFromEdit() {
+            if (!this.duplicateOriginalId) return;
+            const orig = this.labels.find(l => l.id === this.duplicateOriginalId);
+            if (!orig) return;
+            const form = document.getElementById('edit-form');
+            const formData = new FormData(form);
+            const newLabel = {
+                id: Utils.generateId(),
+                article: formData.get('article'),
+                barcode: formData.get('barcode'),
+                color: formData.get('color'),
+                size: formData.get('size'),
+                name: formData.get('name'),
+                seller: formData.get('seller'),
+                gtin: formData.get('gtin'),
+                brand: formData.get('brand'),
+                expiry: formData.get('expiry'),
+                country: formData.get('country'),
+                composition: formData.get('composition'),
+                manufacturer: formData.get('manufacturer'),
+                quantity: parseInt(formData.get('quantity')) || 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            this.labels.push(newLabel);
+            this.saveLabels();
+            this.renderLabels();
+            document.getElementById('edit-modal').classList.add('hidden');
+            Utils.showToast('Дублировано');
         },
 
         duplicateSelected() {
@@ -1045,47 +646,37 @@
             this.selectedLabels.forEach(id => {
                 const label = this.labels.find(l => l.id === id);
                 if (label) {
-                    newLabels.push({
-                        ...label,
-                        id: Utils.generateId(),
-                        quantity: 0,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    });
+                    newLabels.push({ ...label, id: Utils.generateId(), quantity: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
                 }
             });
-
             this.labels.push(...newLabels);
             this.saveLabels();
             this.selectedLabels.clear();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast(`Дублировано: ${newLabels.length}`, 'success');
+            Utils.showToast(`Дублировано: ${newLabels.length}`);
         },
 
         deleteLabel(id) {
-            if (!confirm('Удалить эту этикетку?')) return;
-
+            if (!confirm('Удалить?')) return;
             this.labels = this.labels.filter(l => l.id !== id);
             this.selectedLabels.delete(id);
             this.saveLabels();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast('Этикетка удалена', 'success');
+            Utils.showToast('Удалено');
         },
 
         deleteSelected() {
-            if (!confirm(`Удалить выбранные этикетки (${this.selectedLabels.size})?`)) return;
-
+            if (!confirm(`Удалить ${this.selectedLabels.size} этикеток?`)) return;
             this.labels = this.labels.filter(l => !this.selectedLabels.has(l.id));
             this.selectedLabels.clear();
             this.saveLabels();
             this.renderLabels();
             this.updateBulkActions();
-            Utils.showToast('Этикетки удалены', 'success');
+            Utils.showToast('Удалено');
         },
 
-        // ==================== ИМПОРТ КОЛИЧЕСТВА ====================
         showQuantityImportModal() {
             document.getElementById('quantity-import-modal').classList.remove('hidden');
         },
@@ -1093,49 +684,20 @@
         initQuantityImport() {
             const dropZone = document.getElementById('quantity-drop-zone');
             const fileInput = document.getElementById('quantity-file-input');
-            const btnSelectFile = document.getElementById('quantity-btn-select-file');
-            const btnCancel = document.getElementById('quantity-btn-cancel');
-            const btnConfirm = document.getElementById('quantity-btn-confirm');
-            const modalClose = document.getElementById('quantity-import-modal-close');
-
-            btnSelectFile.addEventListener('click', () => fileInput.click());
-
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    this.handleQuantityFile(e.target.files[0]);
-                }
-            });
-
-            dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('dragover');
-            });
-
-            dropZone.addEventListener('dragleave', () => {
-                dropZone.classList.remove('dragover');
-            });
-
+            document.getElementById('quantity-btn-select-file').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => { if (e.target.files[0]) this.handleQuantityFile(e.target.files[0]); });
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropZone.classList.remove('dragover');
-                if (e.dataTransfer.files.length > 0) {
-                    this.handleQuantityFile(e.dataTransfer.files[0]);
-                }
+                if (e.dataTransfer.files[0]) this.handleQuantityFile(e.dataTransfer.files[0]);
             });
-
-            btnCancel.addEventListener('click', () => {
+            document.getElementById('quantity-btn-cancel').addEventListener('click', () => {
                 document.getElementById('quantity-import-modal').classList.add('hidden');
                 this.importQuantityData = null;
             });
-
-            modalClose.addEventListener('click', () => {
-                document.getElementById('quantity-import-modal').classList.add('hidden');
-                this.importQuantityData = null;
-            });
-
-            btnConfirm.addEventListener('click', () => {
-                this.applyQuantityImport();
-            });
+            document.getElementById('quantity-btn-confirm').addEventListener('click', () => this.applyQuantityImport());
         },
 
         handleQuantityFile(file) {
@@ -1144,25 +706,11 @@
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-                    const hasArticle = jsonData.some(row =>
-                        row.hasOwnProperty('Артикул') || row.hasOwnProperty('article') || row.hasOwnProperty('Article')
-                    );
-                    const hasQuantity = jsonData.some(row =>
-                        row.hasOwnProperty('Количество') || row.hasOwnProperty('quantity') || row.hasOwnProperty('Quantity')
-                    );
-
-                    if (!hasArticle || !hasQuantity) {
-                        Utils.showToast('Файл должен содержать колонки "Артикул" и "Количество"', 'error');
-                        return;
-                    }
-
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                     this.importQuantityData = jsonData;
                     this.showQuantityImportPreview(jsonData);
-                } catch (error) {
-                    Utils.showToast('Ошибка чтения файла: ' + error.message, 'error');
+                } catch (err) {
+                    Utils.showToast('Ошибка: ' + err.message);
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -1171,148 +719,51 @@
         showQuantityImportPreview(data) {
             document.getElementById('quantity-drop-zone').classList.add('hidden');
             document.getElementById('quantity-import-preview').classList.remove('hidden');
-
+            document.getElementById('quantity-import-count').textContent = `Найдено: ${data.length}`;
             const thead = document.getElementById('quantity-preview-thead');
             const tbody = document.getElementById('quantity-preview-tbody');
-
             if (data.length === 0) return;
-
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
-
-            tbody.innerHTML = data.slice(0, 10).map(row => {
-                return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
-            }).join('');
-
-            const count = data.length;
-            document.getElementById('quantity-import-count').textContent = `Найдено записей: ${count}`;
+            tbody.innerHTML = data.slice(0, 10).map(row => '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>').join('');
         },
 
         applyQuantityImport() {
-            if (!this.importQuantityData || this.importQuantityData.length === 0) {
-                Utils.showToast('Нет данных для импорта', 'error');
-                return;
-            }
-
-            let updatedCount = 0;
-
+            if (!this.importQuantityData) return;
+            let count = 0;
             this.importQuantityData.forEach(row => {
-                const article = row['Артикул'] || row['article'] || row['Article'];
-                const quantity = parseInt(row['Количество'] || row['quantity'] || row['Quantity'] || 0);
-
-                if (article) {
-                    const label = this.labels.find(l => l.article === article);
-                    if (label) {
-                        label.quantity = quantity;
-                        label.updatedAt = new Date().toISOString();
-                        updatedCount++;
-                    }
+                const article = row['Артикул'] || row['article'];
+                const quantity = parseInt(row['Количество'] || row['quantity'] || 0);
+                const label = this.labels.find(l => l.article === article);
+                if (label) {
+                    label.quantity = quantity;
+                    label.updatedAt = new Date().toISOString();
+                    count++;
                 }
             });
-
             this.saveLabels();
             this.renderLabels();
-
             document.getElementById('quantity-import-modal').classList.add('hidden');
-            this.importQuantityData = null;
-
-            Utils.showToast(`Обновлено количество у ${updatedCount} этикеток`, 'success');
+            Utils.showToast(`Обновлено: ${count}`);
         },
 
-        // ==================== ПЕЧАТЬ ====================
         updatePrintPreview() {
+            // Simplified preview
             const preview = document.getElementById('label-preview');
-            const format = document.getElementById('print-barcode-format').value;
-            const textSize = document.getElementById('print-text-size').value;
-            const centerText = document.getElementById('print-center-text').checked;
-            const barcodeOnly = document.getElementById('print-barcode-only').checked;
-            const noBarcode = document.getElementById('print-no-barcode').checked;
-            const printType = document.getElementById('print-type').value;
-
-            const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0
-                ? this.labelsForPrint[0]
-                : (this.selectedLabels.size > 0 ? Array.from(this.selectedLabels)[0] : null);
-            const label = firstSelectedId ? this.labels.find(l => l.id === firstSelectedId) : this.labels[0];
-
-            if (!label) {
-                preview.innerHTML = '<p>Нет данных для предпросмотра</p>';
-                return;
-            }
-
-            let html = '<div class="preview-label" style="';
-            html += `font-size: ${textSize}pt; `;
-            html += centerText ? 'text-align: center;' : 'text-align: left;';
-            html += `border: 1px solid #ddd; padding: 10px; max-width: 300px;`;
-            html += '">';
-
-            if (!barcodeOnly && !noBarcode) {
-                html += `<div class="preview-barcode" id="preview-barcode-svg"></div>`;
-                html += `<div class="preview-barcode-text">${Utils.escapeHtml(label.barcode)}</div>`;
-            }
-
-            if (!barcodeOnly) {
-                html += `<div class="preview-article"><strong>Артикул:</strong> ${Utils.escapeHtml(label.article)}</div>`;
-
-                if (label.name) {
-                    html += `<div class="preview-name">${Utils.escapeHtml(label.name)}</div>`;
-                }
-
-                const colorSizeRow = document.getElementById('print-color-size-row').checked;
-                if (colorSizeRow) {
-                    if (label.color || label.size) {
-                        html += `<div class="preview-color-size">`;
-                        if (label.color) html += `Цвет: ${Utils.escapeHtml(label.color)}`;
-                        if (label.color && label.size) html += ' / ';
-                        if (label.size) html += `Размер: ${Utils.escapeHtml(label.size)}`;
-                        html += `</div>`;
-                    }
-                } else {
-                    if (label.color) html += `<div class="preview-color">Цвет: ${Utils.escapeHtml(label.color)}</div>`;
-                    if (label.size) html += `<div class="preview-size">Размер: ${Utils.escapeHtml(label.size)}</div>`;
-                }
-
-                if (label.seller) html += `<div class="preview-seller">${Utils.escapeHtml(label.seller)}</div>`;
-                if (label.gtin) html += `<div class="preview-gtin">GTIN: ${Utils.escapeHtml(label.gtin)}</div>`;
-                if (label.brand) html += `<div class="preview-brand"><strong>Бренд:</strong> ${Utils.escapeHtml(label.brand)}</div>`;
-            }
-
-            html += '</div>';
-
-            if (printType === 'a4') {
-                html += '<div style="margin-top: 10px; font-size: 12px; color: #666;">📄 Формат: A4 (несколько этикеток на листе)</div>';
-            } else {
-                html += '<div style="margin-top: 10px; font-size: 12px; color: #666;">🏷️ Формат: Термоэтикетка (1 этикетка = 1 страница)</div>';
-            }
-
-            preview.innerHTML = html;
-
-            if (!barcodeOnly && !noBarcode) {
-                setTimeout(() => {
-                    try {
-                        JsBarcode("#preview-barcode-svg", label.barcode, {
-                            format: format === 'auto' ? Utils.detectBarcodeFormat(label.barcode) : format,
-                            width: 1.5,
-                            height: 40,
-                            displayValue: false,
-                            margin: 0
-                        });
-                    } catch (e) {
-                        console.error('Ошибка генерации штрихкода:', e);
-                    }
-                }, 100);
-            }
+            preview.innerHTML = '<div style="text-align:center;padding:20px">Предпросмотр этикетки</div>';
         },
 
         async printLabels() {
-            const printType = document.getElementById('print-type').value;
-            const labelSize = document.getElementById('print-label-size').value;
-            const barcodeFormat = document.getElementById('print-barcode-format').value;
-            const textSize = document.getElementById('print-text-size').value;
-            const centerText = document.getElementById('print-center-text').checked;
-            const barcodeOnly = document.getElementById('print-barcode-only').checked;
-            const noBarcode = document.getElementById('print-no-barcode').checked;
-            const colorSizeRow = document.getElementById('print-color-size-row').checked;
-            const gap = document.getElementById('print-gap') ? document.getElementById('print-gap').value : 5;
+            const settings = {
+                printType: document.getElementById('print-type').value,
+                labelSize: document.getElementById('print-label-size').value,
+                barcodeFormat: document.getElementById('print-barcode-format').value,
+                textSize: document.getElementById('print-text-size').value,
+                centerText: document.getElementById('print-center-text').checked,
+                barcodeOnly: document.getElementById('print-barcode-only').checked,
+                noBarcode: document.getElementById('print-no-barcode').checked,
+                colorSizeRow: document.getElementById('print-color-size-row').checked
+            };
 
             let labelsToPrint = [];
             if (this.labelsForPrint && this.labelsForPrint.length > 0) {
@@ -1324,94 +775,45 @@
             }
 
             if (labelsToPrint.length === 0) {
-                Utils.showToast('Нет этикеток для печати', 'error');
+                Utils.showToast('Нет этикеток');
                 return;
             }
 
-            // Разворачиваем по количеству
-            const expandedLabels = [];
+            // Expand by quantity
+            const expanded = [];
             labelsToPrint.forEach(label => {
                 const qty = label.quantity || 1;
-                for (let i = 0; i < qty; i++) {
-                    expandedLabels.push({ ...label });
-                }
+                for (let i = 0; i < qty; i++) expanded.push({ ...label });
             });
 
-            if (expandedLabels.length === 0) {
-                Utils.showToast('Нет этикеток для печати (установите количество > 0)', 'error');
+            if (expanded.length === 0) {
+                Utils.showToast('Установите количество > 0');
                 return;
             }
 
-            Utils.showToast('Генерация PDF... Пожалуйста, подождите', 'info');
-
-            try {
-                const settings = {
-                    printType,
-                    labelSize,
-                    barcodeFormat,
-                    textSize,
-                    centerText,
-                    barcodeOnly,
-                    noBarcode,
-                    colorSizeRow,
-                    gap
-                };
-
-                await PDFGenerator.generateLabelsPDF(expandedLabels, settings);
-                Utils.showToast('✅ PDF успешно создан и скачан!', 'success');
-            } catch (error) {
-                console.error('Ошибка генерации PDF:', error);
-                Utils.showToast('❌ Ошибка при создании PDF: ' + error.message, 'error');
-            }
+            Utils.showToast('Генерация PDF...');
+            await PDFGenerator.generateLabelsPDF(expanded, settings);
         },
 
-        // ==================== ИМПОРТ/ЭКСПОРТ ====================
         initImport() {
             const dropZone = document.getElementById('drop-zone');
             const fileInput = document.getElementById('file-input');
-            const btnSelectFile = document.getElementById('btn-select-file');
-            const btnCancelImport = document.getElementById('btn-cancel-import');
-            const btnConfirmImport = document.getElementById('btn-confirm-import');
-            const btnDownloadTemplate = document.getElementById('btn-download-template');
-
-            btnSelectFile.addEventListener('click', () => fileInput.click());
-
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    this.handleFile(e.target.files[0]);
-                }
-            });
-
-            dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('dragover');
-            });
-
-            dropZone.addEventListener('dragleave', () => {
-                dropZone.classList.remove('dragover');
-            });
-
+            document.getElementById('btn-select-file').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => { if (e.target.files[0]) this.handleFile(e.target.files[0]); });
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
             dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dropZone.classList.remove('dragover');
-                if (e.dataTransfer.files.length > 0) {
-                    this.handleFile(e.dataTransfer.files[0]);
-                }
+                if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]);
             });
-
-            btnCancelImport.addEventListener('click', () => {
+            document.getElementById('btn-cancel-import').addEventListener('click', () => {
                 document.getElementById('import-preview').classList.add('hidden');
                 document.getElementById('drop-zone').classList.remove('hidden');
                 fileInput.value = '';
             });
-
-            btnConfirmImport.addEventListener('click', () => {
-                this.confirmImport();
-            });
-
-            btnDownloadTemplate.addEventListener('click', () => {
-                this.downloadTemplate();
-            });
+            document.getElementById('btn-confirm-import').addEventListener('click', () => this.confirmImport());
+            document.getElementById('btn-download-template').addEventListener('click', () => this.downloadTemplate());
         },
 
         handleFile(file) {
@@ -1420,13 +822,10 @@
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-                    this.importData = jsonData;
-                    this.showImportPreview(jsonData);
-                } catch (error) {
-                    Utils.showToast('Ошибка чтения файла: ' + error.message, 'error');
+                    this.importData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    this.showImportPreview(this.importData);
+                } catch (err) {
+                    Utils.showToast('Ошибка: ' + err.message);
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -1435,145 +834,76 @@
         showImportPreview(data) {
             document.getElementById('drop-zone').classList.add('hidden');
             document.getElementById('import-preview').classList.remove('hidden');
-
             const thead = document.getElementById('preview-thead');
             const tbody = document.getElementById('preview-tbody');
-
             if (data.length === 0) return;
-
             const headers = Object.keys(data[0]);
             thead.innerHTML = '<tr>' + headers.map(h => `<th>${Utils.escapeHtml(h)}</th>`).join('') + '</tr>';
-
-            tbody.innerHTML = data.slice(0, 10).map(row => {
-                return '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>';
-            }).join('');
+            tbody.innerHTML = data.slice(0, 10).map(row => '<tr>' + headers.map(h => `<td>${Utils.escapeHtml(String(row[h] || ''))}</td>`).join('') + '</tr>').join('');
         },
 
         confirmImport() {
-            if (!this.importData || this.importData.length === 0) return;
-
-            const newLabels = this.importData.map(row => {
-                const barcode = String(row['Штрихкод'] || row['barcode'] || row['Баркод'] || '');
-                const barcodeFormat = Utils.detectBarcodeFormat(barcode);
-
-                // ВАЖНО: Проверяем разные варианты названия колонки продавца
-                const seller = String(
-                    row['Наименование продавца'] ||
-                    row['Наименование поставщика'] ||
-                    row['Продавец'] ||
-                    row['Поставщик'] ||
-                    row['seller'] ||
-                    ''
-                );
-
-                return {
-                    id: Utils.generateId(),
-                    article: String(row['Артикул'] || row['article'] || ''),
-                    barcode: barcode,
-                    barcodeFormat: barcodeFormat,
-                    color: String(row['Цвет'] || row['color'] || ''),
-                    size: String(row['Размер'] || row['size'] || ''),
-                    name: String(row['Название товара'] || row['name'] || ''),
-                    seller: seller,
-                    gtin: String(row['GTIN'] || row['gtin'] || ''),
-                    brand: String(row['Бренд'] || row['brand'] || ''),
-                    expiry: String(row['Срок годности'] || row['expiry'] || ''),
-                    country: String(row['Страна производства'] || row['country'] || ''),
-                    composition: String(row['Состав'] || row['composition'] || ''),
-                    manufacturer: String(row['Производитель'] || row['manufacturer'] || ''),
-                    quantity: parseInt(row['Количество'] || row['quantity'] || 0),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-            }).filter(label => label.article && label.barcode);
+            if (!this.importData) return;
+            const newLabels = this.importData.map(row => ({
+                id: Utils.generateId(),
+                article: String(row['Артикул'] || row['article'] || ''),
+                barcode: String(row['Штрихкод'] || row['barcode'] || ''),
+                color: String(row['Цвет'] || row['color'] || ''),
+                size: String(row['Размер'] || row['size'] || ''),
+                name: String(row['Название товара'] || row['name'] || ''),
+                seller: String(row['Наименование продавца'] || row['Наименование поставщика'] || row['seller'] || ''),
+                gtin: String(row['GTIN'] || row['gtin'] || ''),
+                brand: String(row['Бренд'] || row['brand'] || ''),
+                expiry: String(row['Срок годности'] || row['expiry'] || ''),
+                country: String(row['Страна производства'] || row['country'] || ''),
+                composition: String(row['Состав'] || row['composition'] || ''),
+                manufacturer: String(row['Производитель'] || row['manufacturer'] || ''),
+                quantity: parseInt(row['Количество'] || row['quantity'] || 0),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            })).filter(l => l.article && l.barcode);
 
             this.labels.push(...newLabels);
             this.saveLabels();
             this.renderLabels();
-
-            Utils.showToast(`Импортировано: ${newLabels.length} этикеток`, 'success');
-
+            Utils.showToast(`Импортировано: ${newLabels.length}`);
             document.getElementById('import-preview').classList.add('hidden');
             document.getElementById('drop-zone').classList.remove('hidden');
             document.getElementById('file-input').value = '';
-            this.importData = null;
-
             this.navigate('labels');
         },
 
         downloadTemplate() {
             const template = [{
-                'Артикул': 'ART001',
-                'Штрихкод': '4601234567890',
-                'Цвет': 'белый',
-                'Размер': 'XL',
-                'Название товара': 'Футболка мужская',
-                'Наименование поставщика': 'ООО "ТД Нева"',
-                'GTIN': '04601234567890',
-                'Количество': 10,
-                'Бренд': 'Brand',
-                'Срок годности': '24 мес',
-                'Страна производства': 'Россия',
-                'Состав': '100% хлопок',
-                'Производитель': 'ООО "Производитель"'
+                'Артикул': 'ART001', 'Штрихкод': '4601234567890', 'Цвет': 'белый', 'Размер': 'XL',
+                'Название товара': 'Футболка', 'Наименование продавца': 'ООО Пример', 'GTIN': '',
+                'Количество': 10, 'Бренд': 'Brand', 'Срок годности': '', 'Страна производства': 'Россия'
             }];
-
             const ws = XLSX.utils.json_to_sheet(template);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Этикетки');
-            XLSX.writeFile(wb, 'template_labels.xlsx');
+            XLSX.writeFile(wb, 'template.xlsx');
         },
 
         exportToExcel() {
             if (this.labels.length === 0) {
-                Utils.showToast('Нет данных для экспорта', 'warning');
+                Utils.showToast('Нет данных');
                 return;
             }
-
-            const exportData = this.labels.map(label => ({
-                'Артикул': label.article,
-                'Штрихкод': label.barcode,
-                'Цвет': label.color || '',
-                'Размер': label.size || '',
-                'Название товара': label.name || '',
-                'Наименование поставщика': label.seller || '',
-                'GTIN': label.gtin || '',
-                'Количество': label.quantity || 0,
-                'Бренд': label.brand || '',
-                'Срок годности': label.expiry || '',
-                'Страна производства': label.country || '',
-                'Состав': label.composition || '',
-                'Производитель': label.manufacturer || '',
-                'Создана': label.createdAt,
-                'Изменена': label.updatedAt || label.createdAt
+            const data = this.labels.map(l => ({
+                'Артикул': l.article, 'Штрихкод': l.barcode, 'Цвет': l.color || '', 'Размер': l.size || '',
+                'Название товара': l.name || '', 'Наименование продавца': l.seller || '', 'GTIN': l.gtin || '',
+                'Количество': l.quantity || 0, 'Бренд': l.brand || '', 'Срок годности': l.expiry || '',
+                'Создана': l.createdAt, 'Изменена': l.updatedAt || l.createdAt
             }));
-
-            const ws = XLSX.utils.json_to_sheet(exportData);
+            const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Этикетки');
-            XLSX.writeFile(wb, `labels_export_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-            Utils.showToast('Экспорт завершен', 'success');
+            XLSX.writeFile(wb, `labels_${new Date().toISOString().split('T')[0]}.xlsx`);
+            Utils.showToast('Экспорт завершен');
         }
     };
 
-    // Добавляем стили для анимации toast
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(400px); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Запуск приложения
-    document.addEventListener('DOMContentLoaded', () => {
-        App.init();
-    });
+    document.addEventListener('DOMContentLoaded', () => App.init());
 })();
 
