@@ -2,6 +2,7 @@
 (function() {
     'use strict';
 
+    // ==================== ХРАНИЛИЩЕ ====================
     const Storage = {
         getUsers() { return JSON.parse(localStorage.getItem('lm_users') || '[]'); },
         saveUsers(users) { localStorage.setItem('lm_users', JSON.stringify(users)); },
@@ -18,6 +19,7 @@
         }
     };
 
+    // ==================== УТИЛИТЫ ====================
     const Utils = {
         generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); },
         detectBarcodeFormat(barcode) {
@@ -30,7 +32,7 @@
         },
         escapeHtml(text) {
             const div = document.createElement('div');
-            div.textContent = text;
+            div.textContent = text || '';
             return div.innerHTML;
         },
         copyToClipboard(text) {
@@ -47,7 +49,7 @@
         showToast(message) {
             const toast = document.createElement('div');
             toast.textContent = message;
-            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:12px 24px;border-radius:8px;z-index:10000;';
+            toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:12px 24px;border-radius:8px;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         },
@@ -57,6 +59,7 @@
         }
     };
 
+    // ==================== АВТОРИЗАЦИЯ ====================
     const Auth = {
         init() {
             const currentUser = Storage.getCurrentUser();
@@ -94,98 +97,47 @@
         logout() { localStorage.removeItem('lm_current_user'); location.reload(); }
     };
 
-    // ==================== PDF ГЕНЕРАТОР ЧЕРЕЗ html2canvas ====================
+    // ==================== ГЕНЕРАЦИЯ PDF (html2canvas + jsPDF) ====================
+    // Работает с ЛЮБОЙ кириллицей, т.к. использует системные шрифты браузера
     const PDFGenerator = {
-        async generateLabelsPDF(labels, settings) {
-            const { jsPDF } = window.jspdf;
-            const printType = settings.printType || 'thermal';
-            const labelSize = settings.labelSize || '58x38.6';
-            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
-
-            // Создаем PDF
-            const pdf = new jsPDF({
-                orientation: orientation,
-                unit: 'mm',
-                format: [labelWidth, labelHeight],
-                compress: true
-            });
-
-            // Создаем скрытый контейнер для рендеринга этикеток
-            const container = document.createElement('div');
-            container.style.cssText = `position:fixed;left:-9999px;top:0;z-index:-1;`;
-            document.body.appendChild(container);
-
-            try {
-                for (let i = 0; i < labels.length; i++) {
-                    if (i > 0) {
-                        pdf.addPage([labelWidth, labelHeight]);
-                    }
-
-                    // Создаем HTML элемент этикетки
-                    const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
-                    container.appendChild(labelEl);
-
-                    // Ждем загрузки шрифтов и рендеринга
-                    await new Promise(resolve => setTimeout(resolve, 50));
-
-                    // Конвертируем в canvas
-                    const canvas = await html2canvas(labelEl, {
-                        scale: 3, // высокое качество
-                        useCORS: true,
-                        logging: false,
-                        backgroundColor: '#ffffff',
-                        width: labelWidth * 3.78, // мм в пиксели (1мм ≈ 3.78px при 96dpi)
-                        height: labelHeight * 3.78
-                    });
-
-                    // Добавляем в PDF
-                    const imgData = canvas.toDataURL('image/png');
-                    pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
-
-                    // Удаляем элемент
-                    container.removeChild(labelEl);
-                }
-
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                pdf.save(`labels_${timestamp}.pdf`);
-            } catch (error) {
-                console.error('PDF ошибка:', error);
-                alert('Ошибка генерации PDF: ' + error.message);
-            } finally {
-                document.body.removeChild(container);
-            }
-        },
-
+        MM_TO_PX: 3.7795, // 1 мм = 3.78 px при 96 DPI
+        
+        // Создает HTML-элемент одной этикетки
         createLabelElement(label, settings, widthMm, heightMm) {
             const fontSize = parseInt(settings.textSize) || 8;
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
+            const align = centerText ? 'center' : 'left';
+            const padding = 2; // мм
 
             const div = document.createElement('div');
+            div.className = 'pdf-label';
             div.style.cssText = `
                 width: ${widthMm}mm;
                 height: ${heightMm}mm;
-                padding: 2mm;
+                padding: ${padding}mm;
                 box-sizing: border-box;
-                font-family: Arial, sans-serif;
+                font-family: Arial, Helvetica, sans-serif;
                 font-size: ${fontSize}pt;
-                text-align: ${centerText ? 'center' : 'left'};
+                text-align: ${align};
                 background: white;
+                color: black;
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
+                line-height: 1.2;
             `;
 
             let html = '';
 
             // Штрихкод
             if (!barcodeOnly && !noBarcode) {
-                html += `<div style="margin-bottom:1mm;">
-                    <svg id="barcode_${label.id}" style="width:100%;height:15mm;"></svg>
-                    <div style="font-size:6pt;margin-top:0.5mm;">${Utils.escapeHtml(label.barcode)}</div>
+                const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
+                html += `<div style="margin-bottom:1mm;text-align:center;">
+                    <svg id="${bcId}" style="max-width:100%;height:14mm;"></svg>
+                    <div style="font-size:6pt;margin-top:0.5mm;word-break:break-all;">${Utils.escapeHtml(label.barcode)}</div>
                 </div>`;
             }
 
@@ -231,22 +183,165 @@
             // Генерируем штрихкод после добавления в DOM
             setTimeout(() => {
                 try {
-                    const barcodeFormat = settings.barcodeFormat === 'auto' 
+                    const format = settings.barcodeFormat === 'auto' 
                         ? Utils.detectBarcodeFormat(label.barcode) 
                         : settings.barcodeFormat;
-                    JsBarcode(`#barcode_${label.id}`, label.barcode, {
-                        format: barcodeFormat === 'EAN13' ? 'EAN13' : 'CODE128',
+                    JsBarcode('#' + div.querySelector('svg').id, label.barcode, {
+                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
                         width: 1.2,
-                        height: 40,
+                        height: 45,
                         displayValue: false,
                         margin: 0
                     });
-                } catch (e) {
-                    console.error('Barcode error:', e);
-                }
-            }, 10);
+                } catch (e) { console.error('Barcode error:', e); }
+            }, 0);
 
             return div;
+        },
+
+        // Рендерит HTML-элемент в canvas
+        async renderToCanvas(element, widthMm, heightMm) {
+            const scale = 3; // качество
+            const canvas = await html2canvas(element, {
+                scale: scale,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                width: Math.round(widthMm * this.MM_TO_PX),
+                height: Math.round(heightMm * this.MM_TO_PX)
+            });
+            return canvas;
+        },
+
+        async generateLabelsPDF(labels, settings, onProgress) {
+            const { jsPDF } = window.jspdf;
+            if (!window.html2canvas) {
+                throw new Error('html2canvas не загружен. Проверьте подключение скриптов.');
+            }
+
+            const printType = settings.printType || 'thermal';
+            const labelSize = settings.labelSize || '58x38.6';
+            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+            const gap = parseInt(settings.gap) || 3;
+
+            // Создаем скрытый контейнер для рендеринга
+            const container = document.createElement('div');
+            container.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1;';
+            document.body.appendChild(container);
+
+            try {
+                if (printType === 'thermal') {
+                    // ===== ТЕРМОЭТИКЕТКА: 1 этикетка = 1 страница =====
+                    const pdf = new jsPDF({
+                        orientation: labelWidth > labelHeight ? 'landscape' : 'portrait',
+                        unit: 'mm',
+                        format: [labelWidth, labelHeight],
+                        compress: true
+                    });
+
+                    for (let i = 0; i < labels.length; i++) {
+                        if (i > 0) pdf.addPage([labelWidth, labelHeight]);
+                        
+                        const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
+                        container.appendChild(labelEl);
+                        await new Promise(r => setTimeout(r, 50)); // ждем рендер штрихкода
+                        
+                        const canvas = await this.renderToCanvas(labelEl, labelWidth, labelHeight);
+                        const imgData = canvas.toDataURL('image/png');
+                        pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
+                        
+                        container.removeChild(labelEl);
+                        
+                        if (onProgress) onProgress(i + 1, labels.length);
+                    }
+
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                    pdf.save(`labels_${timestamp}.pdf`);
+
+                } else {
+                    // ===== A4: максимум этикеток на листе =====
+                    const pageWidth = 210;
+                    const pageHeight = 297;
+                    const margin = 5; // отступ от краев листа
+                    
+                    // Вычисляем сетку
+                    const usableWidth = pageWidth - margin * 2;
+                    const usableHeight = pageHeight - margin * 2;
+                    const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
+                    const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
+                    const labelsPerPage = cols * rows;
+
+                    // Центрируем сетку на странице
+                    const gridWidth = cols * labelWidth + (cols - 1) * gap;
+                    const gridHeight = rows * labelHeight + (rows - 1) * gap;
+                    const offsetX = margin + (usableWidth - gridWidth) / 2;
+                    const offsetY = margin + (usableHeight - gridHeight) / 2;
+
+                    const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4',
+                        compress: true
+                    });
+
+                    let pageIndex = 0;
+                    for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
+                        if (pageIndex > 0) pdf.addPage('a4');
+                        
+                        const pageLabels = labels.slice(startIdx, startIdx + labelsPerPage);
+                        
+                        // Создаем контейнер размером с A4
+                        const pageContainer = document.createElement('div');
+                        pageContainer.style.cssText = `
+                            width: ${pageWidth}mm;
+                            height: ${pageHeight}mm;
+                            position: relative;
+                            background: white;
+                            box-sizing: border-box;
+                        `;
+                        
+                        // Размещаем этикетки в сетке
+                        pageLabels.forEach((label, idx) => {
+                            const col = idx % cols;
+                            const row = Math.floor(idx / cols);
+                            const x = offsetX + col * (labelWidth + gap);
+                            const y = offsetY + row * (labelHeight + gap);
+                            
+                            const labelEl = this.createLabelElement(label, settings, labelWidth, labelHeight);
+                            labelEl.style.position = 'absolute';
+                            labelEl.style.left = x + 'mm';
+                            labelEl.style.top = y + 'mm';
+                            pageContainer.appendChild(labelEl);
+                        });
+                        
+                        container.appendChild(pageContainer);
+                        await new Promise(r => setTimeout(r, 100));
+                        
+                        // Рендерим всю страницу в один canvas
+                        const canvas = await html2canvas(pageContainer, {
+                            scale: 3,
+                            useCORS: true,
+                            logging: false,
+                            backgroundColor: '#ffffff',
+                            width: Math.round(pageWidth * this.MM_TO_PX),
+                            height: Math.round(pageHeight * this.MM_TO_PX)
+                        });
+                        
+                        const imgData = canvas.toDataURL('image/png');
+                        pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
+                        
+                        container.removeChild(pageContainer);
+                        pageIndex++;
+                        
+                        if (onProgress) onProgress(Math.min(startIdx + labelsPerPage, labels.length), labels.length);
+                    }
+
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                    pdf.save(`labels_A4_${timestamp}.pdf`);
+                }
+            } finally {
+                document.body.removeChild(container);
+            }
         }
     };
 
@@ -314,8 +409,9 @@
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
 
+            // Обновление предпросмотра при изменении настроек
             ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only',
-             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type'].forEach(id => {
+             'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type', 'print-gap'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', () => this.updatePrintPreview());
             });
@@ -507,8 +603,6 @@
 
         duplicateFromEdit() {
             if (!this.duplicateOriginalId) return;
-            const orig = this.labels.find(l => l.id === this.duplicateOriginalId);
-            if (!orig) return;
             const form = document.getElementById('edit-form');
             const formData = new FormData(form);
             const newLabel = {
@@ -624,13 +718,106 @@
             Utils.showToast(`Обновлено: ${count}`);
         },
 
+        // ==================== ПРЕДПРОСМОТР ====================
         updatePrintPreview() {
             const preview = document.getElementById('label-preview');
-            preview.innerHTML = '<div style="text-align:center;padding:20px">Предпросмотр этикетки</div>';
+            const printType = document.getElementById('print-type').value;
+            const labelSize = document.getElementById('print-label-size').value;
+            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+            const gap = parseInt(document.getElementById('print-gap').value) || 3;
+            const settings = this.getPrintSettings();
+
+            // Берем этикетку для превью
+            const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0 
+                ? this.labelsForPrint[0] 
+                : (this.selectedLabels.size > 0 ? Array.from(this.selectedLabels)[0] : null);
+            const label = firstSelectedId ? this.labels.find(l => l.id === firstSelectedId) : this.labels[0];
+
+            if (!label) {
+                preview.innerHTML = '<p style="text-align:center;padding:40px;color:#999;">Нет данных для предпросмотра</p>';
+                return;
+            }
+
+            // Очищаем и настраиваем контейнер превью
+            preview.innerHTML = '';
+            preview.style.cssText = `
+                border: 2px dashed #E5E7EB;
+                border-radius: 12px;
+                padding: 20px;
+                background: #F9FAFB;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            `;
+
+            if (printType === 'thermal') {
+                // Одна этикетка
+                const info = document.createElement('div');
+                info.style.cssText = 'margin-bottom:12px;font-size:13px;color:#6B7280;';
+                info.textContent = `🏷️ Термоэтикетка: ${labelWidth}×${labelHeight} мм (1 этикетка = 1 страница)`;
+                preview.appendChild(info);
+
+                const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
+                labelEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                preview.appendChild(labelEl);
+            } else {
+                // A4 - показываем сетку
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const margin = 5;
+                const usableWidth = pageWidth - margin * 2;
+                const usableHeight = pageHeight - margin * 2;
+                const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
+                const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
+                const labelsPerPage = cols * rows;
+
+                const info = document.createElement('div');
+                info.style.cssText = 'margin-bottom:12px;font-size:13px;color:#6B7280;';
+                info.textContent = `📄 A4: ${cols}×${rows} = ${labelsPerPage} этикеток на листе (зазор ${gap} мм)`;
+                preview.appendChild(info);
+
+                // Масштабируем A4 для превью
+                const scale = Math.min(280 / pageWidth, 400 / pageHeight);
+                const a4Div = document.createElement('div');
+                a4Div.style.cssText = `
+                    width: ${pageWidth * scale}px;
+                    height: ${pageHeight * scale}px;
+                    background: white;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    position: relative;
+                `;
+
+                const gridWidth = cols * labelWidth + (cols - 1) * gap;
+                const gridHeight = rows * labelHeight + (rows - 1) * gap;
+                const offsetX = margin + (usableWidth - gridWidth) / 2;
+                const offsetY = margin + (usableHeight - gridHeight) / 2;
+
+                // Показываем только первые несколько этикеток для превью
+                const previewCount = Math.min(labelsPerPage, 6);
+                for (let i = 0; i < previewCount; i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    const x = offsetX + col * (labelWidth + gap);
+                    const y = offsetY + row * (labelHeight + gap);
+
+                    const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
+                    labelEl.style.position = 'absolute';
+                    labelEl.style.left = (x * scale) + 'px';
+                    labelEl.style.top = (y * scale) + 'px';
+                    labelEl.style.width = (labelWidth * scale) + 'px';
+                    labelEl.style.height = (labelHeight * scale) + 'px';
+                    labelEl.style.fontSize = Math.max(6, parseInt(settings.textSize) * scale * 0.8) + 'pt';
+                    labelEl.style.padding = (2 * scale) + 'px';
+                    labelEl.style.overflow = 'hidden';
+                    a4Div.appendChild(labelEl);
+                }
+
+                preview.appendChild(a4Div);
+            }
         },
 
-        async printLabels() {
-            const settings = {
+        getPrintSettings() {
+            return {
                 printType: document.getElementById('print-type').value,
                 labelSize: document.getElementById('print-label-size').value,
                 barcodeFormat: document.getElementById('print-barcode-format').value,
@@ -638,8 +825,13 @@
                 centerText: document.getElementById('print-center-text').checked,
                 barcodeOnly: document.getElementById('print-barcode-only').checked,
                 noBarcode: document.getElementById('print-no-barcode').checked,
-                colorSizeRow: document.getElementById('print-color-size-row').checked
+                colorSizeRow: document.getElementById('print-color-size-row').checked,
+                gap: document.getElementById('print-gap').value
             };
+        },
+
+        async printLabels() {
+            const settings = this.getPrintSettings();
 
             let labelsToPrint = [];
             if (this.labelsForPrint && this.labelsForPrint.length > 0) {
@@ -660,13 +852,23 @@
 
             if (expanded.length === 0) { Utils.showToast('Установите количество > 0'); return; }
 
-            Utils.showToast('Генерация PDF...');
+            // Показываем прогресс
+            const progressToast = document.createElement('div');
+            progressToast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:16px 24px;border-radius:8px;z-index:10000;min-width:250px;';
+            progressToast.innerHTML = '<div style="margin-bottom:8px;">Генерация PDF...</div><div id="pdf-progress-bar" style="height:4px;background:#374151;border-radius:2px;overflow:hidden;"><div id="pdf-progress-fill" style="height:100%;background:#4F46E5;width:0%;transition:width 0.3s;"></div></div><div id="pdf-progress-text" style="margin-top:6px;font-size:12px;color:#9CA3AF;">0 / ' + expanded.length + '</div>';
+            document.body.appendChild(progressToast);
 
             try {
-                await PDFGenerator.generateLabelsPDF(expanded, settings);
-                Utils.showToast('PDF создан!');
+                await PDFGenerator.generateLabelsPDF(expanded, settings, (done, total) => {
+                    const percent = (done / total) * 100;
+                    document.getElementById('pdf-progress-fill').style.width = percent + '%';
+                    document.getElementById('pdf-progress-text').textContent = done + ' / ' + total;
+                });
+                progressToast.remove();
+                Utils.showToast('✅ PDF создан!');
             } catch (error) {
                 console.error('Ошибка:', error);
+                progressToast.remove();
                 alert('Ошибка генерации PDF: ' + error.message);
             }
         },
