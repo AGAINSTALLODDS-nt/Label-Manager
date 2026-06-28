@@ -2,36 +2,24 @@
 (function() {
     'use strict';
 
-    // ==================== ХРАНИЛИЩЕ ДАННЫХ ====================
     const Storage = {
-        getUsers() {
-            return JSON.parse(localStorage.getItem('lm_users') || '[]');
-        },
-        saveUsers(users) {
-            localStorage.setItem('lm_users', JSON.stringify(users));
-        },
-        getCurrentUser() {
-            return JSON.parse(localStorage.getItem('lm_current_user') || 'null');
-        },
-        setCurrentUser(user) {
-            localStorage.setItem('lm_current_user', JSON.stringify(user));
-        },
+        getUsers() { return JSON.parse(localStorage.getItem('lm_users') || '[]'); },
+        saveUsers(users) { localStorage.setItem('lm_users', JSON.stringify(users)); },
+        getCurrentUser() { return JSON.parse(localStorage.getItem('lm_current_user') || 'null'); },
+        setCurrentUser(user) { localStorage.setItem('lm_current_user', JSON.stringify(user)); },
         getLabels(userId) {
-            const allLabels = JSON.parse(localStorage.getItem('lm_labels') || '{}');
-            return allLabels[userId] || [];
+            const all = JSON.parse(localStorage.getItem('lm_labels') || '{}');
+            return all[userId] || [];
         },
         saveLabels(userId, labels) {
-            const allLabels = JSON.parse(localStorage.getItem('lm_labels') || '{}');
-            allLabels[userId] = labels;
-            localStorage.setItem('lm_labels', JSON.stringify(allLabels));
+            const all = JSON.parse(localStorage.getItem('lm_labels') || '{}');
+            all[userId] = labels;
+            localStorage.setItem('lm_labels', JSON.stringify(all));
         }
     };
 
-    // ==================== УТИЛИТЫ ====================
     const Utils = {
-        generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        },
+        generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); },
         detectBarcodeFormat(barcode) {
             if (!barcode) return 'CODE128';
             const clean = barcode.replace(/\D/g, '');
@@ -46,15 +34,13 @@
             return div.innerHTML;
         },
         copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                this.showToast('Скопировано');
-            }).catch(() => {
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
+            navigator.clipboard.writeText(text).then(() => this.showToast('Скопировано')).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
                 document.execCommand('copy');
-                document.body.removeChild(textarea);
+                document.body.removeChild(ta);
                 this.showToast('Скопировано');
             });
         },
@@ -67,235 +53,200 @@
         },
         formatDate(dateString) {
             if (!dateString) return '';
-            const date = new Date(dateString);
-            return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+            return new Date(dateString).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
     };
 
-    // ==================== АВТОРИЗАЦИЯ ====================
     const Auth = {
         init() {
             const currentUser = Storage.getCurrentUser();
-            if (currentUser) {
-                App.showMainApp();
-            } else {
-                document.getElementById('auth-screen').classList.remove('hidden');
-            }
+            if (currentUser) { App.showMainApp(); } else { document.getElementById('auth-screen').classList.remove('hidden'); }
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    const tabName = tab.dataset.tab;
-                    document.getElementById('login-form').classList.toggle('hidden', tabName !== 'login');
-                    document.getElementById('register-form').classList.toggle('hidden', tabName !== 'register');
+                    document.getElementById('login-form').classList.toggle('hidden', tab.dataset.tab !== 'login');
+                    document.getElementById('register-form').classList.toggle('hidden', tab.dataset.tab !== 'register');
                 });
             });
-            document.getElementById('login-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.login();
-            });
-            document.getElementById('register-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.register();
-            });
+            document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); this.login(); });
+            document.getElementById('register-form').addEventListener('submit', (e) => { e.preventDefault(); this.register(); });
             document.getElementById('btn-logout').addEventListener('click', () => this.logout());
         },
         login() {
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
-            const users = Storage.getUsers();
-            const user = users.find(u => u.username === username && u.password === password);
-            if (user) {
-                Storage.setCurrentUser(user);
-                App.showMainApp();
-            } else {
-                alert('Неверный логин или пароль');
-            }
+            const user = Storage.getUsers().find(u => u.username === username && u.password === password);
+            if (user) { Storage.setCurrentUser(user); App.showMainApp(); } else { alert('Неверный логин или пароль'); }
         },
         register() {
             const username = document.getElementById('reg-username').value.trim();
             const password = document.getElementById('reg-password').value;
-            const passwordConfirm = document.getElementById('reg-password-confirm').value;
-            if (password !== passwordConfirm) {
-                alert('Пароли не совпадают');
-                return;
-            }
+            if (password !== document.getElementById('reg-password-confirm').value) { alert('Пароли не совпадают'); return; }
             const users = Storage.getUsers();
-            if (users.find(u => u.username === username)) {
-                alert('Пользователь уже существует');
-                return;
-            }
+            if (users.find(u => u.username === username)) { alert('Пользователь уже существует'); return; }
             const newUser = { id: Utils.generateId(), username, password, createdAt: new Date().toISOString() };
             users.push(newUser);
             Storage.saveUsers(users);
             Storage.setCurrentUser(newUser);
             App.showMainApp();
         },
-        logout() {
-            localStorage.removeItem('lm_current_user');
-            location.reload();
-        }
+        logout() { localStorage.removeItem('lm_current_user'); location.reload(); }
     };
 
-    // ==================== ГЕНЕРАЦИЯ PDF ====================
+    // ==================== PDF ГЕНЕРАТОР ЧЕРЕЗ html2canvas ====================
     const PDFGenerator = {
         async generateLabelsPDF(labels, settings) {
             const { jsPDF } = window.jspdf;
             const printType = settings.printType || 'thermal';
             const labelSize = settings.labelSize || '58x38.6';
             const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            
+            const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
+
             // Создаем PDF
             const pdf = new jsPDF({
-                orientation: labelWidth > labelHeight ? 'landscape' : 'portrait',
+                orientation: orientation,
                 unit: 'mm',
                 format: [labelWidth, labelHeight],
                 compress: true
             });
 
-            for (let i = 0; i < labels.length; i++) {
-                if (i > 0) {
-                    pdf.addPage([labelWidth, labelHeight]);
-                }
-                this.drawSingleLabel(pdf, labels[i], settings, labelWidth, labelHeight);
-            }
+            // Создаем скрытый контейнер для рендеринга этикеток
+            const container = document.createElement('div');
+            container.style.cssText = `position:fixed;left:-9999px;top:0;z-index:-1;`;
+            document.body.appendChild(container);
 
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-            pdf.save(`labels_${timestamp}.pdf`);
+            try {
+                for (let i = 0; i < labels.length; i++) {
+                    if (i > 0) {
+                        pdf.addPage([labelWidth, labelHeight]);
+                    }
+
+                    // Создаем HTML элемент этикетки
+                    const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
+                    container.appendChild(labelEl);
+
+                    // Ждем загрузки шрифтов и рендеринга
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+                    // Конвертируем в canvas
+                    const canvas = await html2canvas(labelEl, {
+                        scale: 3, // высокое качество
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        width: labelWidth * 3.78, // мм в пиксели (1мм ≈ 3.78px при 96dpi)
+                        height: labelHeight * 3.78
+                    });
+
+                    // Добавляем в PDF
+                    const imgData = canvas.toDataURL('image/png');
+                    pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
+
+                    // Удаляем элемент
+                    container.removeChild(labelEl);
+                }
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                pdf.save(`labels_${timestamp}.pdf`);
+            } catch (error) {
+                console.error('PDF ошибка:', error);
+                alert('Ошибка генерации PDF: ' + error.message);
+            } finally {
+                document.body.removeChild(container);
+            }
         },
 
-        drawSingleLabel(pdf, label, settings, width, height) {
+        createLabelElement(label, settings, widthMm, heightMm) {
             const fontSize = parseInt(settings.textSize) || 8;
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
-            const align = centerText ? 'center' : 'left';
-            
-            pdf.setFontSize(fontSize);
-            pdf.setTextColor(0, 0, 0);
-            
-            let currentY = 2;
-            const lineHeight = fontSize * 0.35;
-            const textX = centerText ? width / 2 : 2;
-            const maxWidth = width - 4;
+
+            const div = document.createElement('div');
+            div.style.cssText = `
+                width: ${widthMm}mm;
+                height: ${heightMm}mm;
+                padding: 2mm;
+                box-sizing: border-box;
+                font-family: Arial, sans-serif;
+                font-size: ${fontSize}pt;
+                text-align: ${centerText ? 'center' : 'left'};
+                background: white;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            `;
+
+            let html = '';
 
             // Штрихкод
             if (!barcodeOnly && !noBarcode) {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const format = settings.barcodeFormat === 'auto' ? Utils.detectBarcodeFormat(label.barcode) : settings.barcodeFormat;
-                    JsBarcode(canvas, label.barcode, {
-                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                        width: 1.2,
-                        height: 15,
-                        displayValue: false,
-                        margin: 0
-                    });
-                    const imgData = canvas.toDataURL('image/png');
-                    const barcodeWidth = Math.min(maxWidth, width - 4);
-                    const barcodeX = centerText ? (width - barcodeWidth) / 2 : 2;
-                    pdf.addImage(imgData, 'PNG', barcodeX, currentY, barcodeWidth, 15);
-                    currentY += 16;
-                    
-                    // Текст штрихкода
-                    pdf.setFontSize(6);
-                    pdf.text(label.barcode, textX, currentY, { align });
-                    currentY += 2;
-                    pdf.setFontSize(fontSize);
-                } catch (e) {
-                    console.error('Barcode error:', e);
-                }
+                html += `<div style="margin-bottom:1mm;">
+                    <svg id="barcode_${label.id}" style="width:100%;height:15mm;"></svg>
+                    <div style="font-size:6pt;margin-top:0.5mm;">${Utils.escapeHtml(label.barcode)}</div>
+                </div>`;
             }
 
             if (!barcodeOnly) {
                 // Артикул
-                pdf.setFont(undefined, 'bold');
-                const articleText = `Артикул: ${label.article}`;
-                const wrappedArticle = this.wrapText(pdf, articleText, maxWidth);
-                wrappedArticle.forEach(line => {
-                    pdf.text(line, textX, currentY, { align });
-                    currentY += lineHeight;
-                });
-                pdf.setFont(undefined, 'normal');
+                html += `<div style="font-weight:bold;margin-bottom:0.5mm;">Артикул: ${Utils.escapeHtml(label.article)}</div>`;
 
-                // Название товара
+                // Название
                 if (label.name) {
-                    const wrappedName = this.wrapText(pdf, label.name, maxWidth);
-                    wrappedName.forEach(line => {
-                        pdf.text(line, textX, currentY, { align });
-                        currentY += lineHeight;
-                    });
+                    html += `<div style="margin-bottom:0.5mm;">${Utils.escapeHtml(label.name)}</div>`;
                 }
 
                 // Цвет и размер
                 if (colorSizeRow) {
-                    let colorSizeText = '';
-                    if (label.color) colorSizeText += `Цвет: ${label.color}`;
-                    if (label.color && label.size) colorSizeText += ' / ';
-                    if (label.size) colorSizeText += `Разм.: ${label.size}`;
-                    if (colorSizeText) {
-                        const wrapped = this.wrapText(pdf, colorSizeText, maxWidth);
-                        wrapped.forEach(line => {
-                            pdf.text(line, textX, currentY, { align });
-                            currentY += lineHeight;
-                        });
-                    }
+                    let cs = '';
+                    if (label.color) cs += `Цвет: ${label.color}`;
+                    if (label.color && label.size) cs += ' / ';
+                    if (label.size) cs += `Разм.: ${label.size}`;
+                    if (cs) html += `<div style="margin-bottom:0.5mm;">${cs}</div>`;
                 } else {
-                    if (label.color) {
-                        pdf.text(`Цвет: ${label.color}`, textX, currentY, { align });
-                        currentY += lineHeight;
-                    }
-                    if (label.size) {
-                        pdf.text(`Размер: ${label.size}`, textX, currentY, { align });
-                        currentY += lineHeight;
-                    }
+                    if (label.color) html += `<div style="margin-bottom:0.5mm;">Цвет: ${Utils.escapeHtml(label.color)}</div>`;
+                    if (label.size) html += `<div style="margin-bottom:0.5mm;">Размер: ${Utils.escapeHtml(label.size)}</div>`;
                 }
 
                 // Продавец
                 if (label.seller) {
-                    const wrappedSeller = this.wrapText(pdf, label.seller, maxWidth);
-                    wrappedSeller.forEach(line => {
-                        pdf.text(line, textX, currentY, { align });
-                        currentY += lineHeight;
-                    });
+                    html += `<div style="margin-bottom:0.5mm;">${Utils.escapeHtml(label.seller)}</div>`;
                 }
 
                 // Бренд
                 if (label.brand) {
-                    pdf.setFont(undefined, 'bold');
-                    pdf.text(`Бренд: ${label.brand}`, textX, currentY, { align });
-                    pdf.setFont(undefined, 'normal');
-                    currentY += lineHeight;
+                    html += `<div style="font-weight:bold;margin-bottom:0.5mm;">Бренд: ${Utils.escapeHtml(label.brand)}</div>`;
                 }
 
                 // Срок годности
                 if (label.expiry) {
-                    pdf.text(`Срок годности: ${label.expiry}`, textX, currentY, { align });
+                    html += `<div>Срок годности: ${Utils.escapeHtml(label.expiry)}</div>`;
                 }
             }
-        },
 
-        wrapText(pdf, text, maxWidth) {
-            if (!text) return [];
-            const words = text.split(' ');
-            const lines = [];
-            let currentLine = '';
-            const fontSize = pdf.internal.getFontSize();
-            const charWidth = fontSize * 0.6 * 0.264583;
+            div.innerHTML = html;
 
-            for (let word of words) {
-                const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                const testWidth = testLine.length * charWidth;
-                if (testWidth > maxWidth && currentLine) {
-                    lines.push(currentLine);
-                    currentLine = word;
-                } else {
-                    currentLine = testLine;
+            // Генерируем штрихкод после добавления в DOM
+            setTimeout(() => {
+                try {
+                    const barcodeFormat = settings.barcodeFormat === 'auto' 
+                        ? Utils.detectBarcodeFormat(label.barcode) 
+                        : settings.barcodeFormat;
+                    JsBarcode(`#barcode_${label.id}`, label.barcode, {
+                        format: barcodeFormat === 'EAN13' ? 'EAN13' : 'CODE128',
+                        width: 1.2,
+                        height: 40,
+                        displayValue: false,
+                        margin: 0
+                    });
+                } catch (e) {
+                    console.error('Barcode error:', e);
                 }
-            }
-            if (currentLine) lines.push(currentLine);
-            return lines;
+            }, 10);
+
+            return div;
         }
     };
 
@@ -333,30 +284,14 @@
 
             document.getElementById('btn-add-label').addEventListener('click', () => this.navigate('create'));
             document.getElementById('btn-cancel-create').addEventListener('click', () => this.navigate('labels'));
-            
-            document.getElementById('create-label-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.createLabel();
-            });
-
+            document.getElementById('create-label-form').addEventListener('submit', (e) => { e.preventDefault(); this.createLabel(); });
             document.getElementById('btn-generate-barcode').addEventListener('click', () => {
-                const input = document.querySelector('#create-label-form input[name="barcode"]');
-                input.value = Math.floor(Math.random() * 1000000000000).toString().padStart(13, '0');
+                document.querySelector('#create-label-form input[name="barcode"]').value = Math.floor(Math.random() * 1000000000000).toString().padStart(13, '0');
             });
-
             document.getElementById('btn-import-excel').addEventListener('click', () => this.navigate('import'));
             document.getElementById('btn-export-excel').addEventListener('click', () => this.exportToExcel());
-            
-            document.getElementById('search-input').addEventListener('input', (e) => {
-                this.currentFilter = e.target.value.toLowerCase();
-                this.renderLabels();
-            });
-
-            document.getElementById('btn-clear-filters').addEventListener('click', () => {
-                document.getElementById('search-input').value = '';
-                this.currentFilter = '';
-                this.renderLabels();
-            });
+            document.getElementById('search-input').addEventListener('input', (e) => { this.currentFilter = e.target.value.toLowerCase(); this.renderLabels(); });
+            document.getElementById('btn-clear-filters').addEventListener('click', () => { document.getElementById('search-input').value = ''; this.currentFilter = ''; this.renderLabels(); });
 
             document.getElementById('select-all').addEventListener('change', (e) => {
                 document.querySelectorAll('.label-checkbox').forEach(cb => {
@@ -379,7 +314,7 @@
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
 
-            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only', 
+            ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only',
              'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', () => this.updatePrintPreview());
@@ -405,23 +340,13 @@
             this.navigate('print');
         },
 
-        loadLabels() {
-            this.labels = Storage.getLabels(this.currentUser.id);
-        },
-
-        saveLabels() {
-            Storage.saveLabels(this.currentUser.id, this.labels);
-            this.updateLabelsCount();
-        },
-
-        updateLabelsCount() {
-            document.getElementById('labels-count').textContent = this.labels.length;
-        },
+        loadLabels() { this.labels = Storage.getLabels(this.currentUser.id); },
+        saveLabels() { Storage.saveLabels(this.currentUser.id, this.labels); this.updateLabelsCount(); },
+        updateLabelsCount() { document.getElementById('labels-count').textContent = this.labels.length; },
 
         renderLabels() {
             const tbody = document.getElementById('labels-tbody');
             tbody.innerHTML = '';
-            
             let filtered = this.labels;
             if (this.currentFilter) {
                 filtered = this.labels.filter(l => Object.values(l).some(v => String(v).toLowerCase().includes(this.currentFilter)));
@@ -454,7 +379,6 @@
                 tbody.appendChild(tr);
             });
 
-            // Event listeners
             document.querySelectorAll('.label-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     if (e.target.checked) this.selectedLabels.add(e.target.dataset.id);
@@ -462,58 +386,29 @@
                     this.updateBulkActions();
                 });
             });
-
-            document.querySelectorAll('.btn-decrease').forEach(btn => {
-                btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, -1));
-            });
-            document.querySelectorAll('.btn-increase').forEach(btn => {
-                btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, 1));
-            });
-            document.querySelectorAll('.quantity-input').forEach(input => {
-                input.addEventListener('change', (e) => this.updateQuantity(e.target.dataset.id, parseInt(e.target.value) || 0));
-            });
-            document.querySelectorAll('.btn-copy').forEach(btn => {
-                btn.addEventListener('click', (e) => Utils.copyToClipboard(e.target.dataset.barcode));
-            });
-            document.querySelectorAll('.btn-edit').forEach(btn => {
-                btn.addEventListener('click', (e) => this.openEditModal(e.target.dataset.id));
-            });
-            document.querySelectorAll('.btn-duplicate').forEach(btn => {
-                btn.addEventListener('click', (e) => this.duplicateLabelWithEdit(e.target.dataset.id));
-            });
-            document.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.addEventListener('click', (e) => this.deleteLabel(e.target.dataset.id));
-            });
+            document.querySelectorAll('.btn-decrease').forEach(btn => btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, -1)));
+            document.querySelectorAll('.btn-increase').forEach(btn => btn.addEventListener('click', (e) => this.changeQuantity(e.target.dataset.id, 1)));
+            document.querySelectorAll('.quantity-input').forEach(input => input.addEventListener('change', (e) => this.updateQuantity(e.target.dataset.id, parseInt(e.target.value) || 0)));
+            document.querySelectorAll('.btn-copy').forEach(btn => btn.addEventListener('click', (e) => Utils.copyToClipboard(e.target.dataset.barcode)));
+            document.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => this.openEditModal(e.target.dataset.id)));
+            document.querySelectorAll('.btn-duplicate').forEach(btn => btn.addEventListener('click', (e) => this.duplicateLabelWithEdit(e.target.dataset.id)));
+            document.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => this.deleteLabel(e.target.dataset.id)));
         },
 
         updateBulkActions() {
             const bulk = document.getElementById('bulk-actions');
             const count = this.selectedLabels.size;
-            if (count > 0) {
-                bulk.classList.remove('hidden');
-                document.getElementById('selected-count').textContent = `Выбрано: ${count}`;
-            } else {
-                bulk.classList.add('hidden');
-            }
+            if (count > 0) { bulk.classList.remove('hidden'); document.getElementById('selected-count').textContent = `Выбрано: ${count}`; }
+            else { bulk.classList.add('hidden'); }
         },
 
         changeQuantity(id, delta) {
             const label = this.labels.find(l => l.id === id);
-            if (label) {
-                label.quantity = Math.max(0, (label.quantity || 0) + delta);
-                label.updatedAt = new Date().toISOString();
-                this.saveLabels();
-                this.renderLabels();
-            }
+            if (label) { label.quantity = Math.max(0, (label.quantity || 0) + delta); label.updatedAt = new Date().toISOString(); this.saveLabels(); this.renderLabels(); }
         },
-
         updateQuantity(id, quantity) {
             const label = this.labels.find(l => l.id === id);
-            if (label) {
-                label.quantity = quantity;
-                label.updatedAt = new Date().toISOString();
-                this.saveLabels();
-            }
+            if (label) { label.quantity = quantity; label.updatedAt = new Date().toISOString(); this.saveLabels(); }
         },
 
         createLabel() {
@@ -645,9 +540,7 @@
             const newLabels = [];
             this.selectedLabels.forEach(id => {
                 const label = this.labels.find(l => l.id === id);
-                if (label) {
-                    newLabels.push({ ...label, id: Utils.generateId(), quantity: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-                }
+                if (label) newLabels.push({ ...label, id: Utils.generateId(), quantity: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
             });
             this.labels.push(...newLabels);
             this.saveLabels();
@@ -677,9 +570,7 @@
             Utils.showToast('Удалено');
         },
 
-        showQuantityImportModal() {
-            document.getElementById('quantity-import-modal').classList.remove('hidden');
-        },
+        showQuantityImportModal() { document.getElementById('quantity-import-modal').classList.remove('hidden'); },
 
         initQuantityImport() {
             const dropZone = document.getElementById('quantity-drop-zone');
@@ -688,15 +579,8 @@
             fileInput.addEventListener('change', (e) => { if (e.target.files[0]) this.handleQuantityFile(e.target.files[0]); });
             dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
             dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('dragover');
-                if (e.dataTransfer.files[0]) this.handleQuantityFile(e.dataTransfer.files[0]);
-            });
-            document.getElementById('quantity-btn-cancel').addEventListener('click', () => {
-                document.getElementById('quantity-import-modal').classList.add('hidden');
-                this.importQuantityData = null;
-            });
+            dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files[0]) this.handleQuantityFile(e.dataTransfer.files[0]); });
+            document.getElementById('quantity-btn-cancel').addEventListener('click', () => { document.getElementById('quantity-import-modal').classList.add('hidden'); this.importQuantityData = null; });
             document.getElementById('quantity-btn-confirm').addEventListener('click', () => this.applyQuantityImport());
         },
 
@@ -706,12 +590,9 @@
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                    this.importQuantityData = jsonData;
-                    this.showQuantityImportPreview(jsonData);
-                } catch (err) {
-                    Utils.showToast('Ошибка: ' + err.message);
-                }
+                    this.importQuantityData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    this.showQuantityImportPreview(this.importQuantityData);
+                } catch (err) { Utils.showToast('Ошибка: ' + err.message); }
             };
             reader.readAsArrayBuffer(file);
         },
@@ -735,11 +616,7 @@
                 const article = row['Артикул'] || row['article'];
                 const quantity = parseInt(row['Количество'] || row['quantity'] || 0);
                 const label = this.labels.find(l => l.article === article);
-                if (label) {
-                    label.quantity = quantity;
-                    label.updatedAt = new Date().toISOString();
-                    count++;
-                }
+                if (label) { label.quantity = quantity; label.updatedAt = new Date().toISOString(); count++; }
             });
             this.saveLabels();
             this.renderLabels();
@@ -748,7 +625,6 @@
         },
 
         updatePrintPreview() {
-            // Simplified preview
             const preview = document.getElementById('label-preview');
             preview.innerHTML = '<div style="text-align:center;padding:20px">Предпросмотр этикетки</div>';
         },
@@ -774,25 +650,25 @@
                 labelsToPrint = this.labels;
             }
 
-            if (labelsToPrint.length === 0) {
-                Utils.showToast('Нет этикеток');
-                return;
-            }
+            if (labelsToPrint.length === 0) { Utils.showToast('Нет этикеток'); return; }
 
-            // Expand by quantity
             const expanded = [];
             labelsToPrint.forEach(label => {
                 const qty = label.quantity || 1;
                 for (let i = 0; i < qty; i++) expanded.push({ ...label });
             });
 
-            if (expanded.length === 0) {
-                Utils.showToast('Установите количество > 0');
-                return;
-            }
+            if (expanded.length === 0) { Utils.showToast('Установите количество > 0'); return; }
 
             Utils.showToast('Генерация PDF...');
-            await PDFGenerator.generateLabelsPDF(expanded, settings);
+
+            try {
+                await PDFGenerator.generateLabelsPDF(expanded, settings);
+                Utils.showToast('PDF создан!');
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка генерации PDF: ' + error.message);
+            }
         },
 
         initImport() {
@@ -802,16 +678,8 @@
             fileInput.addEventListener('change', (e) => { if (e.target.files[0]) this.handleFile(e.target.files[0]); });
             dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
             dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('dragover');
-                if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]);
-            });
-            document.getElementById('btn-cancel-import').addEventListener('click', () => {
-                document.getElementById('import-preview').classList.add('hidden');
-                document.getElementById('drop-zone').classList.remove('hidden');
-                fileInput.value = '';
-            });
+            dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]); });
+            document.getElementById('btn-cancel-import').addEventListener('click', () => { document.getElementById('import-preview').classList.add('hidden'); document.getElementById('drop-zone').classList.remove('hidden'); fileInput.value = ''; });
             document.getElementById('btn-confirm-import').addEventListener('click', () => this.confirmImport());
             document.getElementById('btn-download-template').addEventListener('click', () => this.downloadTemplate());
         },
@@ -824,9 +692,7 @@
                     const workbook = XLSX.read(data, { type: 'array' });
                     this.importData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                     this.showImportPreview(this.importData);
-                } catch (err) {
-                    Utils.showToast('Ошибка: ' + err.message);
-                }
+                } catch (err) { Utils.showToast('Ошибка: ' + err.message); }
             };
             reader.readAsArrayBuffer(file);
         },
@@ -886,10 +752,7 @@
         },
 
         exportToExcel() {
-            if (this.labels.length === 0) {
-                Utils.showToast('Нет данных');
-                return;
-            }
+            if (this.labels.length === 0) { Utils.showToast('Нет данных'); return; }
             const data = this.labels.map(l => ({
                 'Артикул': l.article, 'Штрихкод': l.barcode, 'Цвет': l.color || '', 'Размер': l.size || '',
                 'Название товара': l.name || '', 'Наименование продавца': l.seller || '', 'GTIN': l.gtin || '',
