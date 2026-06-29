@@ -139,308 +139,369 @@
     };
 
     // ==================== ГЕНЕРАЦИЯ PDF ====================
-    const PDFGenerator = {
-        MM_TO_PX: 3.7795,
+const PDFGenerator = {
+    MM_TO_PX: 3.7795,
+    SAFE_ZONE: 2, // мм отступ от краев (безопасная зона)
+    
+    // Измеряет высоту текста с учетом переносов
+    measureTextHeight(text, fontSize, maxWidthMm) {
+        if (!text) return 0;
+        const charsPerLine = Math.floor(maxWidthMm / (fontSize * 0.6 * 0.264583));
+        const words = text.split(' ');
+        let lines = 1;
+        let currentLine = '';
         
-        // Создаем HTML-элемент этикетки с правильным масштабированием
-        createLabelElement(label, settings, widthMm, heightMm) {
-            const centerText = settings.centerText !== false;
-            const barcodeOnly = settings.barcodeOnly || false;
-            const noBarcode = settings.noBarcode || false;
-            const colorSizeRow = settings.colorSizeRow || false;
-            const align = centerText ? 'center' : 'left';
-            
-            const div = document.createElement('div');
-            div.className = 'pdf-label';
-            div.style.cssText = `
-                width: ${widthMm}mm;
-                height: ${heightMm}mm;
-                padding: 2mm;
-                box-sizing: border-box;
-                font-family: Arial, sans-serif;
-                text-align: ${align};
-                background: white;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-            `;
-            
-            // Собираем все текстовые строки
-            const textLines = [];
-            
-            if (!barcodeOnly) {
-                textLines.push({ text: `Артикул: ${label.article}`, bold: true, size: 7 });
-                
-                if (label.name) {
-                    textLines.push({ text: label.name, bold: false, size: 6.5 });
-                }
-                
-                if (colorSizeRow) {
-                    let cs = '';
-                    if (label.color) cs += `Цвет: ${label.color}`;
-                    if (label.color && label.size) cs += ' / ';
-                    if (label.size) cs += `Разм.: ${label.size}`;
-                    if (cs) textLines.push({ text: cs, bold: false, size: 6 });
-                } else {
-                    if (label.color) textLines.push({ text: `Цвет: ${label.color}`, bold: false, size: 6 });
-                    if (label.size) textLines.push({ text: `Размер: ${label.size}`, bold: false, size: 6 });
-                }
-                
-                if (label.seller) {
-                    textLines.push({ text: label.seller, bold: false, size: 6 });
-                }
-                
-                if (label.brand) {
-                    textLines.push({ text: `Бренд: ${label.brand}`, bold: true, size: 6.5 });
-                }
-                
-                if (label.expiry) {
-                    textLines.push({ text: `Срок годности: ${label.expiry}`, bold: false, size: 6 });
-                }
+        words.forEach(word => {
+            const testLine = currentLine + (currentLine ? ' ' : '') + word;
+            if (testLine.length > charsPerLine && currentLine) {
+                lines++;
+                currentLine = word;
+            } else {
+                currentLine = testLine;
             }
+        });
+        
+        return lines * fontSize * 0.35; // высота строки в мм
+    },
+    
+    createLabelElement(label, settings, widthMm, heightMm) {
+        const centerText = settings.centerText !== false;
+        const barcodeOnly = settings.barcodeOnly || false;
+        const noBarcode = settings.noBarcode || false;
+        const colorSizeRow = settings.colorSizeRow || false;
+        
+        // Доступная область с учетом безопасных зон
+        const availableWidth = widthMm - (this.SAFE_ZONE * 2);
+        const availableHeight = heightMm - (this.SAFE_ZONE * 2);
+        
+        // Рассчитываем высоту для штрихкода
+        const barcodeHeight = (!barcodeOnly && !noBarcode) ? Math.min(15, availableHeight * 0.35) : 0;
+        const textAvailableHeight = availableHeight - barcodeHeight - 2; // 2мм отступ
+        
+        // Собираем все текстовые элементы
+        const textElements = [];
+        
+        if (!barcodeOnly) {
+            textElements.push({ 
+                text: `Артикул: ${label.article}`, 
+                bold: true, 
+                baseSize: 7 
+            });
             
-            // Рассчитываем оптимальный размер шрифта
-            const maxLineWidth = widthMm - 4; // мм
-            const availableHeight = heightMm - 4; // мм (вычет padding)
-            const barcodeHeight = (!barcodeOnly && !noBarcode) ? 15 : 0;
-            const textAvailableHeight = availableHeight - barcodeHeight;
-            
-            // Находим максимальный размер шрифта чтобы всё поместилось
-            let fontSize = 7;
-            const minFontSize = 4.5;
-            
-            // Пробуем разные размеры шрифта
-            for (let size = fontSize; size >= minFontSize; size -= 0.5) {
-                const lineHeight = size * 0.35;
-                let totalHeight = 0;
-                let fits = true;
-                
-                textLines.forEach(line => {
-                    const charsPerLine = Math.floor(maxLineWidth / (size * 0.6 * 0.264583));
-                    const words = line.text.split(' ');
-                    let currentLine = '';
-                    let lineCount = 0;
-                    
-                    words.forEach(word => {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        if (testLine.length > charsPerLine && currentLine) {
-                            lineCount++;
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    });
-                    if (currentLine) lineCount++;
-                    totalHeight += lineCount * lineHeight;
-                });
-                
-                if (totalHeight <= textAvailableHeight) {
-                    fontSize = size;
-                    break;
-                }
-                fits = false;
-            }
-            
-            // Генерируем HTML
-            let html = '';
-            
-            // Штрихкод
-            if (!barcodeOnly && !noBarcode) {
-                const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
-                html += `<div style="margin-bottom:1mm;text-align:center;">
-                    <svg id="${bcId}" style="width:100%;height:14mm;"></svg>
-                    <div style="font-size:5pt;margin-top:0.5mm;word-break:break-all;">${Utils.escapeHtml(label.barcode)}</div>
-                </div>`;
-            }
-            
-            // Текст
-            if (!barcodeOnly) {
-                const lineHeight = fontSize * 0.35;
-                
-                textLines.forEach(line => {
-                    const charsPerLine = Math.floor(maxLineWidth / (fontSize * 0.6 * 0.264583));
-                    const words = line.text.split(' ');
-                    let currentLine = '';
-                    const wrappedLines = [];
-                    
-                    words.forEach(word => {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        if (testLine.length > charsPerLine && currentLine) {
-                            wrappedLines.push(currentLine);
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    });
-                    if (currentLine) wrappedLines.push(currentLine);
-                    
-                    wrappedLines.forEach(wLine => {
-                        html += `<div style="font-size:${fontSize}pt;line-height:${lineHeight}mm;margin:0.3mm 0;font-weight:${line.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(wLine)}</div>`;
-                    });
+            if (label.name) {
+                textElements.push({ 
+                    text: label.name, 
+                    bold: false, 
+                    baseSize: 6.5 
                 });
             }
             
-            div.innerHTML = html;
-            
-            // Генерируем штрихкод
-            setTimeout(() => {
-                try {
-                    const svg = div.querySelector('svg');
-                    if (svg) {
-                        const format = settings.barcodeFormat === 'auto' 
-                            ? Utils.detectBarcodeFormat(label.barcode) 
-                            : settings.barcodeFormat;
-                        JsBarcode(svg, label.barcode, {
-                            format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                            width: 1.2,
-                            height: 40,
-                            displayValue: false,
-                            margin: 0
-                        });
-                    }
-                } catch (e) {
-                    console.error('Barcode error:', e);
+            if (colorSizeRow) {
+                let cs = '';
+                if (label.color) cs += `Цвет: ${label.color}`;
+                if (label.color && label.size) cs += ' / ';
+                if (label.size) cs += `Разм.: ${label.size}`;
+                if (cs) {
+                    textElements.push({ 
+                        text: cs, 
+                        bold: false, 
+                        baseSize: 6 
+                    });
                 }
-            }, 10);
-            
-            return div;
-        },
-        
-        async generateLabelsPDF(labels, settings, onProgress) {
-            const { jsPDF } = window.jspdf;
-            if (!window.html2canvas) {
-                throw new Error('html2canvas не загружен');
+            } else {
+                if (label.color) {
+                    textElements.push({ 
+                        text: `Цвет: ${label.color}`, 
+                        bold: false, 
+                        baseSize: 6 
+                    });
+                }
+                if (label.size) {
+                    textElements.push({ 
+                        text: `Размер: ${label.size}`, 
+                        bold: false, 
+                        baseSize: 6 
+                    });
+                }
             }
             
-            const printType = settings.printType || 'thermal';
-            const labelSize = settings.labelSize || '58x38.6';
-            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
-            const gap = parseInt(settings.gap) || 3;
+            if (label.seller) {
+                textElements.push({ 
+                    text: label.seller, 
+                    bold: false, 
+                    baseSize: 6 
+                });
+            }
             
-            const container = document.createElement('div');
-            container.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1;';
-            document.body.appendChild(container);
+            if (label.brand) {
+                textElements.push({ 
+                    text: `Бренд: ${label.brand}`, 
+                    bold: true, 
+                    baseSize: 6.5 
+                });
+            }
             
-            try {
-                if (printType === 'thermal') {
-                    const pdf = new jsPDF({
-                        orientation: orientation,
-                        unit: 'mm',
-                        format: [labelWidth, labelHeight],
-                        compress: true
-                    });
-                    
-                    for (let i = 0; i < labels.length; i++) {
-                        if (i > 0) {
-                            pdf.addPage([labelWidth, labelHeight]);
-                        }
-                        
-                        const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
-                        container.appendChild(labelEl);
-                        await new Promise(r => setTimeout(r, 50));
-                        
-                        const canvas = await html2canvas(labelEl, {
-                            scale: 3,
-                            useCORS: true,
-                            logging: false,
-                            backgroundColor: '#ffffff',
-                            width: Math.round(labelWidth * this.MM_TO_PX),
-                            height: Math.round(labelHeight * this.MM_TO_PX)
-                        });
-                        
-                        const imgData = canvas.toDataURL('image/png');
-                        pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
-                        
-                        container.removeChild(labelEl);
-                        
-                        if (onProgress) onProgress(i + 1, labels.length);
-                    }
-                    
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                    pdf.save(`labels_${timestamp}.pdf`);
-                } else {
-                    const pageWidth = 210;
-                    const pageHeight = 297;
-                    const margin = 5;
-                    
-                    const usableWidth = pageWidth - margin * 2;
-                    const usableHeight = pageHeight - margin * 2;
-                    const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
-                    const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
-                    const labelsPerPage = cols * rows;
-                    
-                    const gridWidth = cols * labelWidth + (cols - 1) * gap;
-                    const gridHeight = rows * labelHeight + (rows - 1) * gap;
-                    const offsetX = margin + (usableWidth - gridWidth) / 2;
-                    const offsetY = margin + (usableHeight - gridHeight) / 2;
-                    
-                    const pdf = new jsPDF({
-                        orientation: 'portrait',
-                        unit: 'mm',
-                        format: 'a4',
-                        compress: true
-                    });
-                    
-                    let pageIndex = 0;
-                    for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
-                        if (pageIndex > 0) {
-                            pdf.addPage('a4');
-                        }
-                        
-                        const pageLabels = labels.slice(startIdx, startIdx + labelsPerPage);
-                        
-                        const pageContainer = document.createElement('div');
-                        pageContainer.style.cssText = `
-                            width: ${pageWidth}mm;
-                            height: ${pageHeight}mm;
-                            position: relative;
-                            background: white;
-                            box-sizing: border-box;
-                        `;
-                        
-                        pageLabels.forEach((label, idx) => {
-                            const col = idx % cols;
-                            const row = Math.floor(idx / cols);
-                            const x = offsetX + col * (labelWidth + gap);
-                            const y = offsetY + row * (labelHeight + gap);
-                            
-                            const labelEl = this.createLabelElement(label, settings, labelWidth, labelHeight);
-                            labelEl.style.position = 'absolute';
-                            labelEl.style.left = x + 'mm';
-                            labelEl.style.top = y + 'mm';
-                            pageContainer.appendChild(labelEl);
-                        });
-                        
-                        container.appendChild(pageContainer);
-                        await new Promise(r => setTimeout(r, 100));
-                        
-                        const canvas = await html2canvas(pageContainer, {
-                            scale: 3,
-                            useCORS: true,
-                            logging: false,
-                            backgroundColor: '#ffffff',
-                            width: Math.round(pageWidth * this.MM_TO_PX),
-                            height: Math.round(pageHeight * this.MM_TO_PX)
-                        });
-                        
-                        const imgData = canvas.toDataURL('image/png');
-                        pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
-                        
-                        container.removeChild(pageContainer);
-                        pageIndex++;
-                        
-                        if (onProgress) onProgress(Math.min(startIdx + labelsPerPage, labels.length), labels.length);
-                    }
-                    
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                    pdf.save(`labels_A4_${timestamp}.pdf`);
-                }
-            } finally {
-                document.body.removeChild(container);
+            if (label.expiry) {
+                textElements.push({ 
+                    text: `Срок годности: ${label.expiry}`, 
+                    bold: false, 
+                    baseSize: 5.5 
+                });
             }
         }
-    };
+        
+        // Рассчитываем необходимый размер шрифта
+        let fontSize = 7;
+        const minFontSize = 4.5;
+        const maxFontSize = 8;
+        
+        // Пробуем разные размеры пока не найдем подходящий
+        for (let size = maxFontSize; size >= minFontSize; size -= 0.5) {
+            let totalHeight = 0;
+            let fits = true;
+            
+            textElements.forEach(elem => {
+                const lineHeight = this.measureTextHeight(elem.text, size, availableWidth);
+                totalHeight += lineHeight + 0.5; // 0.5мм отступ между элементами
+            });
+            
+            if (totalHeight <= textAvailableHeight) {
+                fontSize = size;
+                break;
+            }
+        }
+        
+        // Создаем HTML
+        const div = document.createElement('div');
+        div.className = 'pdf-label';
+        div.style.cssText = `
+            width: ${widthMm}mm;
+            height: ${heightMm}mm;
+            padding: ${this.SAFE_ZONE}mm;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+            font-size: ${fontSize}pt;
+            text-align: ${centerText ? 'center' : 'left'};
+            background: white;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        `;
+        
+        let html = '';
+        
+        // Штрихкод
+        if (!barcodeOnly && !noBarcode) {
+            const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
+            html += `<div style="margin-bottom:1mm;text-align:center;">
+                <svg id="${bcId}" style="width:100%;height:${barcodeHeight}mm;"></svg>
+                <div style="font-size:${Math.max(4, fontSize * 0.65)}pt;margin-top:0.5mm;word-break:break-all;line-height:1.1;">${Utils.escapeHtml(label.barcode)}</div>
+            </div>`;
+        }
+        
+        // Текст с переносами
+        if (!barcodeOnly) {
+            const lineHeightMm = fontSize * 0.35;
+            
+            textElements.forEach(elem => {
+                const words = elem.text.split(' ');
+                const charsPerLine = Math.floor(availableWidth / (fontSize * 0.6 * 0.264583));
+                let currentLine = '';
+                const lines = [];
+                
+                words.forEach(word => {
+                    const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                    if (testLine.length > charsPerLine && currentLine) {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    } else {
+                        currentLine = testLine;
+                    }
+                });
+                if (currentLine) lines.push(currentLine);
+                
+                lines.forEach(line => {
+                    html += `<div style="font-size:${fontSize}pt;line-height:${lineHeightMm}mm;margin:0.3mm 0;font-weight:${elem.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(line)}</div>`;
+                });
+            });
+        }
+        
+        div.innerHTML = html;
+        
+        // Генерируем штрихкод
+        setTimeout(() => {
+            try {
+                const svg = div.querySelector('svg');
+                if (svg) {
+                    const format = settings.barcodeFormat === 'auto' 
+                        ? Utils.detectBarcodeFormat(label.barcode) 
+                        : settings.barcodeFormat;
+                    JsBarcode(svg, label.barcode, {
+                        format: format === 'EAN13' ? 'EAN13' : 'CODE128',
+                        width: 1.2,
+                        height: 35,
+                        displayValue: false,
+                        margin: 0
+                    });
+                }
+            } catch (e) {
+                console.error('Barcode error:', e);
+            }
+        }, 10);
+        
+        return div;
+    },
+    
+    async generateLabelsPDF(labels, settings, onProgress) {
+        const { jsPDF } = window.jspdf;
+        if (!window.html2canvas) {
+            throw new Error('html2canvas не загружен');
+        }
+        
+        this.cancelGeneration = false;
+        const printType = settings.printType || 'thermal';
+        const labelSize = settings.labelSize || '58x38.6';
+        const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+        const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
+        const gap = parseInt(settings.gap) || 3;
+        
+        const container = document.createElement('div');
+        container.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1;';
+        document.body.appendChild(container);
+        
+        try {
+            if (printType === 'thermal') {
+                const pdf = new jsPDF({
+                    orientation: orientation,
+                    unit: 'mm',
+                    format: [labelWidth, labelHeight],
+                    compress: true
+                });
+                
+                for (let i = 0; i < labels.length; i++) {
+                    if (this.cancelGeneration) {
+                        throw new Error('Генерация отменена пользователем');
+                    }
+                    
+                    if (i > 0) {
+                        pdf.addPage([labelWidth, labelHeight]);
+                    }
+                    
+                    const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
+                    container.appendChild(labelEl);
+                    await new Promise(r => setTimeout(r, 50));
+                    
+                    const canvas = await html2canvas(labelEl, {
+                        scale: 3,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        width: Math.round(labelWidth * this.MM_TO_PX),
+                        height: Math.round(labelHeight * this.MM_TO_PX)
+                    });
+                    
+                    const imgData = canvas.toDataURL('image/png');
+                    pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
+                    
+                    container.removeChild(labelEl);
+                    
+                    if (onProgress) onProgress(i + 1, labels.length);
+                }
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                pdf.save(`labels_${timestamp}.pdf`);
+            } else {
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const margin = 5;
+                
+                const usableWidth = pageWidth - margin * 2;
+                const usableHeight = pageHeight - margin * 2;
+                const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
+                const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
+                const labelsPerPage = cols * rows;
+                
+                const gridWidth = cols * labelWidth + (cols - 1) * gap;
+                const gridHeight = rows * labelHeight + (rows - 1) * gap;
+                const offsetX = margin + (usableWidth - gridWidth) / 2;
+                const offsetY = margin + (usableHeight - gridHeight) / 2;
+                
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4',
+                    compress: true
+                });
+                
+                let pageIndex = 0;
+                for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
+                    if (this.cancelGeneration) {
+                        throw new Error('Генерация отменена пользователем');
+                    }
+                    
+                    if (pageIndex > 0) {
+                        pdf.addPage('a4');
+                    }
+                    
+                    const pageLabels = labels.slice(startIdx, startIdx + labelsPerPage);
+                    
+                    const pageContainer = document.createElement('div');
+                    pageContainer.style.cssText = `
+                        width: ${pageWidth}mm;
+                        height: ${pageHeight}mm;
+                        position: relative;
+                        background: white;
+                        box-sizing: border-box;
+                    `;
+                    
+                    pageLabels.forEach((label, idx) => {
+                        const col = idx % cols;
+                        const row = Math.floor(idx / cols);
+                        const x = offsetX + col * (labelWidth + gap);
+                        const y = offsetY + row * (labelHeight + gap);
+                        
+                        const labelEl = this.createLabelElement(label, settings, labelWidth, labelHeight);
+                        labelEl.style.position = 'absolute';
+                        labelEl.style.left = x + 'mm';
+                        labelEl.style.top = y + 'mm';
+                        pageContainer.appendChild(labelEl);
+                    });
+                    
+                    container.appendChild(pageContainer);
+                    await new Promise(r => setTimeout(r, 100));
+                    
+                    const canvas = await html2canvas(pageContainer, {
+                        scale: 3,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                        width: Math.round(pageWidth * this.MM_TO_PX),
+                        height: Math.round(pageHeight * this.MM_TO_PX)
+                    });
+                    
+                    const imgData = canvas.toDataURL('image/png');
+                    pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
+                    
+                    container.removeChild(pageContainer);
+                    pageIndex++;
+                    
+                    if (onProgress) onProgress(Math.min(startIdx + labelsPerPage, labels.length), labels.length);
+                }
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+                pdf.save(`labels_A4_${timestamp}.pdf`);
+            }
+        } finally {
+            document.body.removeChild(container);
+            this.cancelGeneration = false;
+        }
+    },
+    
+    cancel() {
+        this.cancelGeneration = true;
+    }
+};
 
     // ==================== ПРИЛОЖЕНИЕ ====================
     const App = {
