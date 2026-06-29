@@ -472,6 +472,7 @@
                 this.updateBulkActions();
             });
             
+            document.getElementById('btn-bulk-reset-quantity').addEventListener('click', () => this.resetQuantitySelected());
             document.getElementById('btn-bulk-duplicate').addEventListener('click', () => this.duplicateSelected());
             document.getElementById('btn-bulk-delete').addEventListener('click', () => this.deleteSelected());
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
