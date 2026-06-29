@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LabelManager - Управление этикетками</title>
-    <link rel="stylesheet" href="css/style.css">
+    <title>Label Manager - Генератор этикеток</title>
+    <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -12,134 +12,163 @@
 </head>
 <body>
     <!-- Экран авторизации -->
-    <div id="auth-screen" class="auth-screen">
+    <div id="auth-screen" class="auth-screen hidden">
         <div class="auth-container">
-            <h1>🏷️ LabelManager</h1>
-            <p class="auth-subtitle">Управление этикетками и штрихкодами</p>
-            
+            <h1>📋 Label Manager</h1>
             <div class="auth-tabs">
                 <button class="auth-tab active" data-tab="login">Вход</button>
                 <button class="auth-tab" data-tab="register">Регистрация</button>
             </div>
             
             <form id="login-form" class="auth-form">
-                <input type="text" id="login-username" placeholder="Логин" required>
-                <input type="password" id="login-password" placeholder="Пароль" required>
+                <div class="form-group">
+                    <label>Логин</label>
+                    <input type="text" id="login-username" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="login-password" required>
+                </div>
                 <button type="submit" class="btn-primary">Войти</button>
             </form>
             
             <form id="register-form" class="auth-form hidden">
-                <input type="text" id="reg-username" placeholder="Логин" required>
-                <input type="password" id="reg-password" placeholder="Пароль" required minlength="4">
-                <input type="password" id="reg-password-confirm" placeholder="Подтвердите пароль" required>
+                <div class="form-group">
+                    <label>Логин</label>
+                    <input type="text" id="reg-username" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="reg-password" required>
+                </div>
+                <div class="form-group">
+                    <label>Подтверждение пароля</label>
+                    <input type="password" id="reg-password-confirm" required>
+                </div>
                 <button type="submit" class="btn-primary">Зарегистрироваться</button>
             </form>
-            
-            <div id="auth-error" class="auth-error hidden"></div>
         </div>
     </div>
 
     <!-- Основное приложение -->
     <div id="app" class="app hidden">
-        <!-- Боковая панель -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>🏷️ LabelManager</h2>
+        <!-- Шапка -->
+        <header class="header">
+            <div class="header-left">
+                <h1>📋 Label Manager</h1>
             </div>
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-page="labels">
-                    <span class="nav-icon">📋</span>
-                    <span>Мои этикетки</span>
-                    <span class="badge" id="labels-count">0</span>
-                </a>
-                <a href="#" class="nav-item" data-page="import">
-                    <span class="nav-icon">📊</span>
-                    <span>Этикетки из XLSX</span>
-                </a>
-            </nav>
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <span class="user-avatar" id="user-avatar">👤</span>
-                    <span class="user-name" id="user-name">Пользователь</span>
-                </div>
-                <button class="btn-logout" id="btn-logout">Выйти</button>
+            <div class="header-right">
+                <span class="user-info">👤 <span id="user-name"></span></span>
+                <button class="btn-secondary" id="btn-logout">Выход</button>
             </div>
-        </aside>
+        </header>
 
-        <!-- Основной контент -->
-        <main class="main-content">
-            <!-- Страница "Мои этикетки" -->
-            <div id="page-labels" class="page active">
-                <div class="page-header">
-                    <h1>Мои этикетки</h1>
-                    <div class="page-actions">
-                        <button class="btn-secondary" id="btn-import-excel">📥 Загрузить из файла</button>
-                        <button class="btn-secondary" id="btn-export-excel">💾 Экспорт в Excel</button>
-                        <button class="btn-primary" id="btn-add-label">➕ Добавить этикетку</button>
-                    </div>
-                </div>
+        <!-- Навигация -->
+        <nav class="nav">
+            <button class="nav-item active" data-page="labels">📑 Мои этикетки</button>
+            <button class="nav-item" data-page="create">➕ Создать этикетку</button>
+            <button class="nav-item" data-page="import">📥 Импорт из Excel</button>
+            <button class="nav-item" data-page="print">🖨️ Печать</button>
+        </nav>
 
-                <!-- Панель поиска и фильтров -->
-                <div class="filter-panel">
-                    <input type="text" id="search-input" placeholder="🔍 Поиск по всем полям..." class="search-input">
-                    <button class="btn-icon" id="btn-clear-filters" title="Очистить фильтры">✕</button>
-                </div>
-
-                <!-- Таблица этикеток -->
-                <div class="table-container">
-                    <table class="labels-table">
-                        <thead>
-                            <tr>
-                                <th class="col-checkbox">
-                                    <input type="checkbox" id="select-all">
-                                </th>
-                                <th class="col-quantity">Кол-во</th>
-                                <th class="col-barcode">Баркод</th>
-                                <th class="col-article">Артикул</th>
-                                <th class="col-color">Цвет</th>
-                                <th class="col-size">Размер</th>
-                                <th class="col-name">Название товара</th>
-                                <th class="col-seller">Продавец</th>
-                                <th class="col-gtin">GTIN</th>
-                                <th class="col-dates">Создана/Изменена</th>
-                                <th class="col-actions">Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="labels-tbody">
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Панель массовых действий -->
-                <div class="bulk-actions hidden" id="bulk-actions">
-                    <span id="selected-count">Выбрано: 0</span>
-                    <button class="btn-secondary btn-sm" id="btn-bulk-duplicate">Дублировать</button>
-                    <button class="btn-secondary btn-sm" id="btn-bulk-delete">Удалить</button>
-                    <button class="btn-secondary btn-sm" id="btn-bulk-set-quantity">Установить количество</button>
-                    <button class="btn-secondary btn-sm" id="btn-bulk-reset-quantity">Обнулить количество</button>
-                    <button class="btn-primary btn-sm" id="btn-bulk-print">🖨️ Печать выбранных</button>
+        <!-- Страница "Мои этикетки" -->
+        <div id="page-labels" class="page active">
+            <div class="page-header">
+                <h1>Мои этикетки</h1>
+                <div class="page-actions">
+                    <button class="btn-secondary" id="btn-import-excel">📥 Загрузить из файла</button>
+                    <button class="btn-secondary" id="btn-export-excel">💾 Экспорт в Excel</button>
+                    <button class="btn-primary" id="btn-add-label">➕ Добавить этикетку</button>
                 </div>
             </div>
 
-            <!-- Страница создания этикетки -->
-            <div id="page-create" class="page">
-                <div class="page-header">
-                    <h1>Создать этикетку</h1>
-                </div>
-                <form id="create-label-form" class="form-container">
-                    <div class="form-grid">
+            <!-- Панель управления группами -->
+            <div class="groups-panel">
+                <label>📁 Группа:</label>
+                <select id="group-selector">
+                    <option value="all">Все этикетки</option>
+                </select>
+                <button class="btn-secondary btn-sm" id="btn-create-group">➕ Новая группа</button>
+                <button class="btn-secondary btn-sm" id="btn-rename-group" style="display:none;">✏️ Переименовать</button>
+                <button class="btn-secondary btn-sm" id="btn-delete-group" style="display:none;">🗑️ Удалить группу</button>
+                <div style="margin-left:auto;font-size:13px;color:var(--text-secondary);" id="group-stats"></div>
+            </div>
+
+            <!-- Панель поиска и фильтров -->
+            <div class="filter-panel">
+                <input type="text" id="search-input" placeholder="🔍 Поиск по всем полям..." class="search-input">
+                <button class="btn-icon" id="btn-clear-filters" title="Очистить фильтры">✕</button>
+            </div>
+
+            <!-- Таблица этикеток -->
+            <div class="table-container">
+                <table class="labels-table">
+                    <thead>
+                        <tr>
+                            <th class="col-checkbox">
+                                <input type="checkbox" id="select-all">
+                            </th>
+                            <th class="col-quantity">Кол-во</th>
+                            <th class="col-barcode">Баркод</th>
+                            <th class="col-article">Артикул</th>
+                            <th class="col-color">Цвет</th>
+                            <th class="col-size">Размер</th>
+                            <th class="col-name">Название товара</th>
+                            <th class="col-seller">Продавец</th>
+                            <th class="col-gtin">GTIN</th>
+                            <th class="col-dates">Создана/Изменена</th>
+                            <th class="col-actions">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="labels-tbody">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Панель массовых действий -->
+            <div class="bulk-actions hidden" id="bulk-actions">
+                <span id="selected-count">Выбрано: 0</span>
+                <button class="btn-secondary btn-sm" id="btn-bulk-duplicate">Дублировать</button>
+                <button class="btn-secondary btn-sm" id="btn-bulk-add-to-group">📁 В группу</button>
+                <button class="btn-secondary btn-sm" id="btn-bulk-delete">Удалить</button>
+                <button class="btn-secondary btn-sm" id="btn-bulk-set-quantity">Установить количество</button>
+                <button class="btn-primary btn-sm" id="btn-bulk-print">🖨️ Печать выбранных</button>
+            </div>
+        </div>
+
+        <!-- Страница "Создать этикетку" -->
+        <div id="page-create" class="page">
+            <div class="page-header">
+                <h1>➕ Создать этикетку</h1>
+            </div>
+            <div class="form-container">
+                <form id="create-label-form" class="label-form">
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Артикул *</label>
                             <input type="text" name="article" required>
                         </div>
                         <div class="form-group">
                             <label>Штрихкод *</label>
-                            <div class="input-with-btn">
+                            <div class="input-with-button">
                                 <input type="text" name="barcode" required>
-                                <button type="button" class="btn-secondary btn-sm" id="btn-generate-barcode">Генерировать</button>
+                                <button type="button" class="btn-secondary" id="btn-generate-barcode">🎲</button>
                             </div>
-                            <div id="create-barcode-format-display" class="barcode-format-info"></div>
                         </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Название товара</label>
+                            <input type="text" name="name">
+                        </div>
+                        <div class="form-group">
+                            <label>Продавец</label>
+                            <input type="text" name="seller">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Цвет</label>
                             <input type="text" name="color">
@@ -148,22 +177,20 @@
                             <label>Размер</label>
                             <input type="text" name="size">
                         </div>
-                        <div class="form-group full-width">
-                            <label>Название товара</label>
-                            <input type="text" name="name">
-                        </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
-                            <label>Наименование продавца</label>
-                            <input type="text" name="seller">
+                            <label>Бренд</label>
+                            <input type="text" name="brand">
                         </div>
                         <div class="form-group">
                             <label>GTIN</label>
                             <input type="text" name="gtin">
                         </div>
-                        <div class="form-group">
-                            <label>Бренд</label>
-                            <input type="text" name="brand">
-                        </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Срок годности</label>
                             <input type="text" name="expiry">
@@ -172,6 +199,9 @@
                             <label>Страна производства</label>
                             <input type="text" name="country">
                         </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Состав</label>
                             <input type="text" name="composition">
@@ -180,79 +210,137 @@
                             <label>Производитель</label>
                             <input type="text" name="manufacturer">
                         </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Количество для печати</label>
                             <input type="number" name="quantity" value="1" min="0">
                         </div>
                     </div>
+                    
                     <div class="form-actions">
-                        <button type="submit" class="btn-primary">Сохранить этикетку</button>
                         <button type="button" class="btn-secondary" id="btn-cancel-create">Отмена</button>
+                        <button type="submit" class="btn-primary">Создать</button>
                     </div>
                 </form>
             </div>
+        </div>
 
-            <!-- Страница настроек печати -->
-            <div id="page-print" class="page">
-                <div class="page-header">
-                    <h1>Настройки печати</h1>
+        <!-- Страница "Импорт из Excel" -->
+        <div id="page-import" class="page">
+            <div class="page-header">
+                <h1>📥 Импорт из Excel</h1>
+            </div>
+            <div class="import-container">
+                <div id="drop-zone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <div class="drop-icon">📁</div>
+                        <p>Перетащите файл сюда или</p>
+                        <button class="btn-primary" id="btn-select-file">Выбрать файл</button>
+                        <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
+                    </div>
                 </div>
                 
-                <div class="print-settings">
-                    <div class="settings-grid">
-                        <div class="form-group">
-                            <label>Тип печати</label>
-                            <select id="print-type">
-                                <option value="thermal">🏷️ Термоэтикетка (1 этикетка = 1 страница)</option>
-                                <option value="a4">📄 Лист А4 (несколько этикеток)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Формат штрихкода</label>
-                            <select id="print-barcode-format">
-                                <option value="auto">Авто (определять автоматически)</option>
-                                <option value="CODE128">CODE-128</option>
-                                <option value="EAN13">EAN-13</option>
-                                <option value="EAN8">EAN-8</option>
-                                <option value="UPC">UPC</option>
-                                <option value="CODE39">CODE-39</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Размер этикетки, мм</label>
-                            <select id="print-label-size">
-                                <option value="58x38.6">58x38.6</option>
-                                <option value="58x40">58x40</option>
-                                <option value="58x60">58x60</option>
-                                <option value="58x100">58x100</option>
-                                <option value="40x30">40x30</option>
-                                <option value="40x40">40x40</option>
-                                <option value="30x20">30x20</option>
-                                <option value="100x100">100x100</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Размер текста</label>
-                            <select id="print-text-size">
-                                <option value="8">8pt</option>
-                                <option value="10" selected>10pt</option>
-                                <option value="12">12pt</option>
-                                <option value="14">14pt</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Ориентация</label>
-                            <select id="print-orientation">
-                                <option value="portrait">Книжная</option>
-                                <option value="landscape">Альбомная</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Зазор между этикетками (для А4), мм</label>
-                            <input type="number" id="print-gap" value="5" min="0" max="20">
-                        </div>
+                <div id="import-preview" class="import-preview hidden">
+                    <h3>Предпросмотр данных</h3>
+                    <div class="table-container">
+                        <table class="preview-table">
+                            <thead id="preview-thead"></thead>
+                            <tbody id="preview-tbody"></tbody>
+                        </table>
                     </div>
+                    <div class="form-actions">
+                        <button class="btn-secondary" id="btn-cancel-import">Отмена</button>
+                        <button class="btn-primary" id="btn-confirm-import">Импортировать</button>
+                    </div>
+                </div>
+                
+                <div class="import-info">
+                    <h3>Формат файла:</h3>
+                    <ul>
+                        <li><strong>Артикул</strong> (обязательно)</li>
+                        <li><strong>Штрихкод</strong> (обязательно)</li>
+                        <li>Цвет</li>
+                        <li>Размер</li>
+                        <li>Название товара</li>
+                        <li>Наименование продавца</li>
+                        <li>GTIN</li>
+                        <li>Количество</li>
+                        <li>Бренд</li>
+                        <li>Срок годности</li>
+                        <li>Страна производства</li>
+                        <li>Состав</li>
+                        <li>Производитель</li>
+                    </ul>
+                    <button class="btn-secondary" id="btn-download-template">📥 Скачать шаблон</button>
+                </div>
+            </div>
+        </div>
 
+        <!-- Страница "Печать" -->
+        <div id="page-print" class="page">
+            <div class="page-header">
+                <h1>🖨️ Печать этикеток</h1>
+            </div>
+            <div class="print-container">
+                <div class="print-settings">
+                    <h3>Настройки печати</h3>
+                    
+                    <div class="form-group">
+                        <label>Тип бумаги</label>
+                        <select id="print-type">
+                            <option value="thermal">Термоэтикетка (1 этикетка = 1 страница)</option>
+                            <option value="a4">A4 (несколько этикеток на листе)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Размер этикетки</label>
+                        <select id="print-label-size">
+                            <option value="58x38.6">58 × 38.6 мм</option>
+                            <option value="58x30">58 × 30 мм</option>
+                            <option value="58x40">58 × 40 мм</option>
+                            <option value="30x20">30 × 20 мм</option>
+                            <option value="40x30">40 × 30 мм</option>
+                            <option value="70x37">70 × 37 мм</option>
+                            <option value="100x100">100 × 100 мм</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Ориентация</label>
+                        <select id="print-orientation">
+                            <option value="portrait">Книжная</option>
+                            <option value="landscape">Альбомная</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Зазор между этикетками (для A4), мм</label>
+                        <input type="number" id="print-gap" value="3" min="0" max="10">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Формат штрихкода</label>
+                        <select id="print-barcode-format">
+                            <option value="auto">Автоопределение</option>
+                            <option value="EAN13">EAN-13</option>
+                            <option value="CODE128">CODE-128</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Размер текста, pt</label>
+                        <select id="print-text-size">
+                            <option value="6">6 pt</option>
+                            <option value="7">7 pt</option>
+                            <option value="8" selected>8 pt</option>
+                            <option value="9">9 pt</option>
+                            <option value="10">10 pt</option>
+                        </select>
+                    </div>
+                    
                     <div class="checkbox-group">
                         <label class="checkbox-label">
                             <input type="checkbox" id="print-center-text" checked>
@@ -271,97 +359,51 @@
                             <span>Печатать без штрихкода</span>
                         </label>
                     </div>
-
-                    <div class="preview-section">
-                        <h3>Предпросмотр этикетки</h3>
-                        <div id="label-preview" class="label-preview">
-                        </div>
-                    </div>
-
-                    <div class="print-actions">
-                        <button class="btn-primary btn-lg" id="btn-print">🖨️ Скачать PDF</button>
-                        <button class="btn-secondary btn-lg" id="btn-back-to-labels">← Назад к этикеткам</button>
-                    </div>
+                    
+                    <button class="btn-primary" id="btn-print">🖨️ Сгенерировать PDF</button>
+                </div>
+                
+                <div class="print-preview">
+                    <h3>Предпросмотр этикетки</h3>
+                    <div id="label-preview"></div>
                 </div>
             </div>
-
-            <!-- Страница импорта -->
-            <div id="page-import" class="page">
-                <div class="page-header">
-                    <h1>Импорт из Excel</h1>
-                </div>
-                <div class="import-container">
-                    <div class="import-instructions">
-                        <h3>📋 Инструкция по импорту</h3>
-                        <p>Загрузите Excel файл (.xlsx или .xls) со следующими колонками:</p>
-                        <ul>
-                            <li><strong>Артикул</strong> (обязательно)</li>
-                            <li><strong>Штрихкод</strong> (обязательно)</li>
-                            <li>Цвет</li>
-                            <li>Размер</li>
-                            <li>Название товара</li>
-                            <li>Наименование продавца</li>
-                            <li>GTIN</li>
-                            <li>Количество</li>
-                            <li>Бренд</li>
-                            <li>Срок годности</li>
-                            <li>Страна производства</li>
-                            <li>Состав</li>
-                            <li>Производитель</li>
-                        </ul>
-                        <button class="btn-secondary" id="btn-download-template">📥 Скачать шаблон</button>
-                    </div>
-                    <div class="import-area">
-                        <div class="drop-zone" id="drop-zone">
-                            <div class="drop-zone-content">
-                                <div class="drop-zone-icon">📁</div>
-                                <p>Перетащите файл сюда или</p>
-                                <button class="btn-primary" id="btn-select-file">Выбрать файл</button>
-                                <input type="file" id="file-input" accept=".xlsx,.xls" class="hidden">
-                            </div>
-                        </div>
-                        <div id="import-preview" class="import-preview hidden">
-                            <h3>Предпросмотр данных</h3>
-                            <div class="table-container">
-                                <table class="preview-table" id="preview-table">
-                                    <thead id="preview-thead"></thead>
-                                    <tbody id="preview-tbody"></tbody>
-                                </table>
-                            </div>
-                            <div class="import-actions">
-                                <button class="btn-primary" id="btn-confirm-import">Импортировать</button>
-                                <button class="btn-secondary" id="btn-cancel-import">Отмена</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
+        </div>
     </div>
 
-    <!-- Модальное окно редактирования / дублирования -->
+    <!-- Модальное окно редактирования -->
     <div id="edit-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="edit-modal-title">Редактировать этикетку</h2>
+                <h2>Редактировать этикетку</h2>
                 <button class="modal-close" id="modal-close">✕</button>
             </div>
-            <form id="edit-form" class="form-container">
+            <form id="edit-form" class="label-form">
                 <input type="hidden" name="id">
-                <input type="hidden" name="mode" value="edit">
-                <div class="form-grid">
+                
+                <div class="form-row">
                     <div class="form-group">
-                        <label>Артикул *</label>
+                        <label>Артикул</label>
                         <input type="text" name="article" required>
                     </div>
                     <div class="form-group">
-                        <label>Штрихкод *</label>
-                        <div class="input-with-btn">
-                            <input type="text" name="barcode" required>
-                            <button type="button" class="btn-secondary btn-sm btn-copy-barcode" title="Копировать">📋</button>
-                        </div>
-                        <div id="edit-barcode-format-display" class="barcode-format-info"></div>
+                        <label>Штрихкод</label>
+                        <input type="text" name="barcode" required>
                     </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Название товара</label>
+                        <input type="text" name="name">
+                    </div>
+                    <div class="form-group">
+                        <label>Продавец</label>
+                        <input type="text" name="seller">
+                    </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label>Цвет</label>
                         <input type="text" name="color">
@@ -370,98 +412,173 @@
                         <label>Размер</label>
                         <input type="text" name="size">
                     </div>
-                    <div class="form-group full-width">
-                        <label>Название товара</label>
-                        <input type="text" name="name">
-                    </div>
-                    <div class="form-group">
-                        <label>Наименование продавца</label>
-                        <input type="text" name="seller">
-                    </div>
-                    <div class="form-group">
-                        <label>GTIN</label>
-                        <input type="text" name="gtin">
-                    </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label>Бренд</label>
                         <input type="text" name="brand">
                     </div>
                     <div class="form-group">
+                        <label>GTIN</label>
+                        <input type="text" name="gtin">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
                         <label>Срок годности</label>
                         <input type="text" name="expiry">
                     </div>
                     <div class="form-group">
-                        <label>Страна производства</label>
-                        <input type="text" name="country">
-                    </div>
-                    <div class="form-group">
-                        <label>Состав</label>
-                        <input type="text" name="composition">
-                    </div>
-                    <div class="form-group">
-                        <label>Производитель</label>
-                        <input type="text" name="manufacturer">
-                    </div>
-                    <div class="form-group">
-                        <label>Количество для печати</label>
-                        <input type="number" name="quantity" value="1" min="0">
+                        <label>Количество</label>
+                        <input type="number" name="quantity" value="0" min="0">
                     </div>
                 </div>
+                
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary" id="edit-submit-btn">Сохранить</button>
                     <button type="button" class="btn-secondary" id="btn-cancel-edit">Отмена</button>
+                    <button type="submit" class="btn-primary">Сохранить</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Модальное окно импорта количества из Excel -->
+    <!-- Модальное окно импорта количества -->
     <div id="quantity-import-modal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h2>📥 Импорт количества из Excel</h2>
+                <h2>Импорт количества из Excel</h2>
                 <button class="modal-close" id="quantity-import-modal-close">✕</button>
             </div>
-            <div class="import-instructions" style="margin-bottom: 20px;">
+            
+            <div class="import-info">
                 <p>Загрузите Excel файл с колонками:</p>
                 <ul>
                     <li><strong>Артикул</strong> (обязательно) — должен совпадать с артикулом в базе</li>
                     <li><strong>Количество</strong> (обязательно) — число копий для печати</li>
                 </ul>
-                <p style="color: var(--text-secondary); font-size: 13px;">
-                    💡 Количества будут обновлены только для тех артикулов, которые найдены в базе.
-                </p>
+                <p style="color:var(--text-secondary);font-size:13px;">💡 Количества будут обновлены только для тех артикулов, которые найдены в базе.</p>
             </div>
-            <div class="import-area">
-                <div class="drop-zone" id="quantity-drop-zone">
-                    <div class="drop-zone-content">
-                        <div class="drop-zone-icon">📁</div>
-                        <p>Перетащите файл сюда или</p>
-                        <button class="btn-primary" id="quantity-btn-select-file">Выбрать файл</button>
-                        <input type="file" id="quantity-file-input" accept=".xlsx,.xls" class="hidden">
-                    </div>
+            
+            <div id="quantity-drop-zone" class="drop-zone">
+                <div class="drop-zone-content">
+                    <div class="drop-icon">📁</div>
+                    <p>Перетащите файл сюда или</p>
+                    <button class="btn-primary" id="quantity-btn-select-file">Выбрать файл</button>
+                    <input type="file" id="quantity-file-input" accept=".xlsx,.xls" style="display:none;">
                 </div>
-                <div id="quantity-import-preview" class="import-preview hidden">
-                    <h3>Предпросмотр данных</h3>
-                    <div id="quantity-import-count" style="margin: 10px 0; font-weight: bold; color: var(--primary);"></div>
-                    <div class="table-container">
-                        <table class="preview-table" id="quantity-preview-table">
-                            <thead id="quantity-preview-thead"></thead>
-                            <tbody id="quantity-preview-tbody"></tbody>
-                        </table>
-                    </div>
-                    <div class="import-actions">
-                        <button class="btn-primary" id="quantity-btn-confirm">✅ Применить</button>
-                        <button class="btn-secondary" id="quantity-btn-cancel">Отмена</button>
-                    </div>
+            </div>
+            
+            <div id="quantity-import-preview" class="import-preview hidden">
+                <h3>Предпросмотр: <span id="quantity-import-count"></span></h3>
+                <div class="table-container">
+                    <table class="preview-table">
+                        <thead id="quantity-preview-thead"></thead>
+                        <tbody id="quantity-preview-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="form-actions">
+                    <button class="btn-secondary" id="quantity-btn-cancel">Отмена</button>
+                    <button class="btn-primary" id="quantity-btn-confirm">Применить</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Область для печати (используется для генерации штрихкодов перед PDF) -->
-    <div id="print-area" class="print-area"></div>
+    <!-- Модальное окно создания группы -->
+    <div id="create-group-modal" class="modal hidden">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Создать новую группу</h2>
+                <button class="modal-close" id="create-group-close">✕</button>
+            </div>
+            <div class="form-group">
+                <label>Название группы</label>
+                <input type="text" id="new-group-name" class="new-group-input" placeholder="Например: Маркетплейс Wildberries">
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" id="btn-confirm-create-group">Создать</button>
+                <button class="btn-secondary" id="btn-cancel-create-group">Отмена</button>
+            </div>
+        </div>
+    </div>
 
-    <script src="js/app.js"></script>
+    <!-- Модальное окно дублирования с выбором группы -->
+    <div id="duplicate-group-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Дублировать этикетки</h2>
+                <button class="modal-close" id="duplicate-group-close">✕</button>
+            </div>
+            <div class="group-modal-body">
+                <p style="color:var(--text-secondary);font-size:14px;">
+                    Куда создать дубликаты выбранных этикеток?
+                </p>
+                
+                <label class="group-option">
+                    <input type="radio" name="duplicate-target" value="current" checked>
+                    <div class="group-option-content">
+                        <div class="group-option-title">📋 В текущую группу</div>
+                        <div class="group-option-desc">Дубликаты появятся рядом с оригиналами</div>
+                    </div>
+                </label>
+                
+                <label class="group-option">
+                    <input type="radio" name="duplicate-target" value="existing">
+                    <div class="group-option-content">
+                        <div class="group-option-title">📁 В существующую группу</div>
+                        <div class="group-option-desc">Выберите группу из списка</div>
+                    </div>
+                </label>
+                
+                <div id="existing-groups-list" class="group-select-list" style="display:none;">
+                    <!-- Список заполняется динамически -->
+                </div>
+                
+                <label class="group-option">
+                    <input type="radio" name="duplicate-target" value="new">
+                    <div class="group-option-content">
+                        <div class="group-option-title">✨ В новую группу</div>
+                        <div class="group-option-desc">Создать группу и поместить дубликаты в неё</div>
+                    </div>
+                </label>
+                
+                <div id="new-group-for-duplicate" style="display:none;">
+                    <input type="text" id="duplicate-new-group-name" class="new-group-input" placeholder="Название новой группы">
+                </div>
+            </div>
+            <div class="form-actions" style="margin-top:20px;">
+                <button class="btn-primary" id="btn-confirm-duplicate-group">Дублировать</button>
+                <button class="btn-secondary" id="btn-cancel-duplicate-group">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления в группу -->
+    <div id="add-to-group-modal" class="modal hidden">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Добавить в группу</h2>
+                <button class="modal-close" id="add-to-group-close">✕</button>
+            </div>
+            <div class="form-group">
+                <label>Выберите группу</label>
+                <select id="add-to-group-select" class="new-group-input">
+                    <option value="">-- Выберите --</option>
+                </select>
+            </div>
+            <div style="margin-top:12px;">
+                <p style="font-size:13px;color:var(--text-secondary);">Или создайте новую:</p>
+                <input type="text" id="add-to-new-group-name" class="new-group-input" placeholder="Название новой группы">
+            </div>
+            <div class="form-actions" style="margin-top:20px;">
+                <button class="btn-primary" id="btn-confirm-add-to-group">Добавить</button>
+                <button class="btn-secondary" id="btn-cancel-add-to-group">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>
