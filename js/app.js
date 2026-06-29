@@ -1051,97 +1051,26 @@ const PDFGenerator = {
         },
         
         updatePrintPreview() {
-            const preview = document.getElementById('label-preview');
-            const printType = document.getElementById('print-type').value;
-            const labelSize = document.getElementById('print-label-size').value;
-            const orientation = document.getElementById('print-orientation').value;
-            const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const gap = parseInt(document.getElementById('print-gap').value) || 3;
-            const settings = this.getPrintSettings();
-            settings.orientation = orientation;
-            
-            const firstSelectedId = this.labelsForPrint && this.labelsForPrint.length > 0 
-                ? this.labelsForPrint[0] 
-                : (this.selectedLabels.size > 0 ? Array.from(this.selectedLabels)[0] : null);
-            const label = firstSelectedId ? this.labels.find(l => l.id === firstSelectedId) : this.labels[0];
-            
-            if (!label) {
-                preview.innerHTML = '<p style="text-align:center;padding:40px;color:#999;">Нет данных для предпросмотра</p>';
-                return;
-            }
-            
-            preview.innerHTML = '';
-            preview.style.cssText = `
-                border: 2px dashed #E5E7EB;
-                border-radius: 12px;
-                padding: 20px;
-                background: #F9FAFB;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            `;
-            
-            if (printType === 'thermal') {
-                const info = document.createElement('div');
-                info.style.cssText = 'margin-bottom:12px;font-size:13px;color:#6B7280;';
-                const orientText = orientation === 'landscape' ? 'альбомная' : 'книжная';
-                info.textContent = `🏷️ Термоэтикетка: ${labelWidth}×${labelHeight} мм (${orientText}, 1 этикетка = 1 страница)`;
-                preview.appendChild(info);
-                
-                const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
-                labelEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                preview.appendChild(labelEl);
-            } else {
-                const pageWidth = 210;
-                const pageHeight = 297;
-                const margin = 5;
-                const usableWidth = pageWidth - margin * 2;
-                const usableHeight = pageHeight - margin * 2;
-                const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
-                const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
-                const labelsPerPage = cols * rows;
-                
-                const info = document.createElement('div');
-                info.style.cssText = 'margin-bottom:12px;font-size:13px;color:#6B7280;';
-                const orientText = orientation === 'landscape' ? 'альбомная' : 'книжная';
-                info.textContent = `📄 A4: ${cols}×${rows} = ${labelsPerPage} этикеток на листе (зазор ${gap} мм, ${orientText})`;
-                preview.appendChild(info);
-                
-                const scale = Math.min(280 / pageWidth, 400 / pageHeight);
-                const a4Div = document.createElement('div');
-                a4Div.style.cssText = `
-                    width: ${pageWidth * scale}px;
-                    height: ${pageHeight * scale}px;
-                    background: white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    position: relative;
-                `;
-                
-                const gridWidth = cols * labelWidth + (cols - 1) * gap;
-                const gridHeight = rows * labelHeight + (rows - 1) * gap;
-                const offsetX = margin + (usableWidth - gridWidth) / 2;
-                const offsetY = margin + (usableHeight - gridHeight) / 2;
-                
-                const previewCount = Math.min(labelsPerPage, 6);
-                for (let i = 0; i < previewCount; i++) {
-                    const col = i % cols;
-                    const row = Math.floor(i / cols);
-                    const x = offsetX + col * (labelWidth + gap);
-                    const y = offsetY + row * (labelHeight + gap);
-                    
-                    const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
-                    labelEl.style.position = 'absolute';
-                    labelEl.style.left = (x * scale) + 'px';
-                    labelEl.style.top = (y * scale) + 'px';
-                    labelEl.style.width = (labelWidth * scale) + 'px';
-                    labelEl.style.height = (labelHeight * scale) + 'px';
-                    labelEl.style.overflow = 'hidden';
-                    a4Div.appendChild(labelEl);
-                }
-                
-                preview.appendChild(a4Div);
-            }
-        },
+    const preview = document.getElementById('label-preview');
+    const printType = document.getElementById('print-type').value;
+    const labelSize = document.getElementById('print-label-size').value;
+    const orientation = document.getElementById('print-orientation').value;
+    const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
+    const gap = parseInt(document.getElementById('print-gap').value) || 3;
+    const settings = this.getPrintSettings();
+    se…e.left = (x * scale) + 'px';
+            labelEl.style.top = (y * scale) + 'px';
+            labelEl.style.width = (labelWidth * scale) + 'px';
+            labelEl.style.height = (labelHeight * scale) + 'px';
+            labelEl.style.transform = `scale(${scale})`;
+            labelEl.style.transformOrigin = 'top left';
+            labelEl.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+            a4Wrapper.appendChild(labelEl);
+        }
+        
+        preview.appendChild(a4Wrapper);
+    }
+},
         
         getPrintSettings() {
             return {
