@@ -16,6 +16,16 @@
             const all = JSON.parse(localStorage.getItem('lm_labels') || '{}');
             all[userId] = labels;
             localStorage.setItem('lm_labels', JSON.stringify(all));
+        },
+        // НОВОЕ: Группы
+        getGroups(userId) {
+            const all = JSON.parse(localStorage.getItem('lm_groups') || '{}');
+            return all[userId] || [];
+        },
+        saveGroups(userId, groups) {
+            const all = JSON.parse(localStorage.getItem('lm_groups') || '{}');
+            all[userId] = groups;
+            localStorage.setItem('lm_groups', JSON.stringify(all));
         }
     };
 
@@ -68,11 +78,8 @@
     const Auth = {
         init() {
             const currentUser = Storage.getCurrentUser();
-            if (currentUser) {
-                App.showMainApp();
-            } else {
-                document.getElementById('auth-screen').classList.remove('hidden');
-            }
+            if (currentUser) { App.showMainApp(); }
+            else { document.getElementById('auth-screen').classList.remove('hidden'); }
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
@@ -121,12 +128,8 @@
             let currentLine = '';
             words.forEach(word => {
                 const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                if (testLine.length > maxCharsPerLine && currentLine) {
-                    lines++;
-                    currentLine = word;
-                } else {
-                    currentLine = testLine;
-                }
+                if (testLine.length > maxCharsPerLine && currentLine) { lines++; currentLine = word; }
+                else { currentLine = testLine; }
             });
             return lines;
         },
@@ -137,8 +140,7 @@
             while (fontSize >= minSize) {
                 const lineHeight = fontSize * 0.35;
                 const lines = this.measureTextLines(text, fontSize, maxWidthMm);
-                const totalHeight = lines * lineHeight;
-                if (totalHeight <= maxHeightMm) return fontSize;
+                if (lines * lineHeight <= maxHeightMm) return fontSize;
                 fontSize -= 0.5;
             }
             return minSize;
@@ -150,12 +152,9 @@
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
             const align = centerText ? 'center' : 'left';
-
             const availableWidth = widthMm - (this.SAFE_MARGIN * 2);
             const availableHeight = heightMm - (this.SAFE_MARGIN * 2);
-
-            const barcodeHeightRatio = 0.35;
-            const barcodeHeight = (!barcodeOnly && !noBarcode) ? availableHeight * barcodeHeightRatio : 0;
+            const barcodeHeight = (!barcodeOnly && !noBarcode) ? availableHeight * 0.35 : 0;
             const barcodeNumberHeight = 3;
             const textAvailableHeight = availableHeight - barcodeHeight - barcodeNumberHeight - 2;
 
@@ -176,7 +175,6 @@
             `;
 
             let html = '';
-
             if (!noBarcode) {
                 const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
                 const bcH = barcodeOnly ? availableHeight * 0.7 : barcodeHeight;
@@ -190,7 +188,6 @@
                 const elements = [];
                 elements.push({ text: `Артикул: ${label.article}`, bold: true, maxSize: 7.5, minSize: 5, priority: 1 });
                 if (label.name) elements.push({ text: label.name, bold: false, maxSize: 7, minSize: 5, priority: 2 });
-                
                 if (colorSizeRow) {
                     let cs = '';
                     if (label.color) cs += `Цвет: ${label.color}`;
@@ -221,15 +218,10 @@
                     const lines = [];
                     words.forEach(word => {
                         const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        if (testLine.length > maxCharsPerLine && currentLine) {
-                            lines.push(currentLine);
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
+                        if (testLine.length > maxCharsPerLine && currentLine) { lines.push(currentLine); currentLine = word; }
+                        else { currentLine = testLine; }
                     });
                     if (currentLine) lines.push(currentLine);
-
                     lines.forEach(line => {
                         html += `<div style="font-size:${el.fontSize}pt;line-height:${lineHeight}mm;margin:0.3mm 0;font-weight:${el.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(line)}</div>`;
                     });
@@ -237,7 +229,6 @@
             }
 
             div.innerHTML = html;
-
             setTimeout(() => {
                 try {
                     const svg = div.querySelector('svg');
@@ -247,22 +238,17 @@
                             : settings.barcodeFormat;
                         JsBarcode(svg, label.barcode, {
                             format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                            width: 1.2,
-                            height: 40,
-                            displayValue: false,
-                            margin: 0
+                            width: 1.2, height: 40, displayValue: false, margin: 0
                         });
                     }
                 } catch (e) { console.error('Barcode error:', e); }
             }, 10);
-
             return div;
         },
 
         async generateLabelsPDF(labels, settings, onProgress) {
             const { jsPDF } = window.jspdf;
             if (!window.html2canvas) throw new Error('html2canvas не загружен');
-
             const printType = settings.printType || 'thermal';
             const labelSize = settings.labelSize || '58x38.6';
             const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
@@ -277,67 +263,46 @@
                 if (printType === 'thermal') {
                     const pdf = new jsPDF({
                         orientation: labelWidth > labelHeight ? 'landscape' : 'portrait',
-                        unit: 'mm',
-                        format: [labelWidth, labelHeight],
-                        compress: true
+                        unit: 'mm', format: [labelWidth, labelHeight], compress: true
                     });
-
                     for (let i = 0; i < labels.length; i++) {
                         if (i > 0) pdf.addPage([labelWidth, labelHeight]);
                         const labelEl = this.createLabelElement(labels[i], settings, labelWidth, labelHeight);
                         container.appendChild(labelEl);
                         await new Promise(r => setTimeout(r, 50));
                         const canvas = await html2canvas(labelEl, {
-                            scale: 3, useCORS: true, logging: false,
-                            backgroundColor: '#ffffff',
+                            scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff',
                             width: Math.round(labelWidth * this.MM_TO_PX),
                             height: Math.round(labelHeight * this.MM_TO_PX)
                         });
-                        const imgData = canvas.toDataURL('image/png');
-                        pdf.addImage(imgData, 'PNG', 0, 0, labelWidth, labelHeight);
+                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, labelWidth, labelHeight);
                         container.removeChild(labelEl);
                         if (onProgress) onProgress(i + 1, labels.length);
                     }
-
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                    pdf.save(`labels_${timestamp}.pdf`);
+                    pdf.save(`labels_${new Date().toISOString().replace(/[:.]/g, '-').split('T')[0]}.pdf`);
                 } else {
                     const pageWidth = orientation === 'landscape' ? 297 : 210;
                     const pageHeight = orientation === 'landscape' ? 210 : 297;
                     const margin = 5;
-
                     const usableWidth = pageWidth - margin * 2;
                     const usableHeight = pageHeight - margin * 2;
                     const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
                     const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
                     const labelsPerPage = cols * rows;
-
                     const gridWidth = cols * labelWidth + (cols - 1) * gap;
                     const gridHeight = rows * labelHeight + (rows - 1) * gap;
                     const offsetX = margin + (usableWidth - gridWidth) / 2;
                     const offsetY = margin + (usableHeight - gridHeight) / 2;
 
                     const pdf = new jsPDF({
-                        orientation: orientation,
-                        unit: 'mm',
-                        format: [pageWidth, pageHeight],
-                        compress: true
+                        orientation: orientation, unit: 'mm', format: [pageWidth, pageHeight], compress: true
                     });
-
                     let pageIndex = 0;
                     for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
                         if (pageIndex > 0) pdf.addPage([pageWidth, pageHeight]);
                         const pageLabels = labels.slice(startIdx, startIdx + labelsPerPage);
-
                         const pageContainer = document.createElement('div');
-                        pageContainer.style.cssText = `
-                            width: ${pageWidth}mm;
-                            height: ${pageHeight}mm;
-                            position: relative;
-                            background: white;
-                            box-sizing: border-box;
-                        `;
-
+                        pageContainer.style.cssText = `width:${pageWidth}mm;height:${pageHeight}mm;position:relative;background:white;box-sizing:border-box;`;
                         pageLabels.forEach((label, idx) => {
                             const col = idx % cols;
                             const row = Math.floor(idx / cols);
@@ -349,26 +314,19 @@
                             labelEl.style.top = y + 'mm';
                             pageContainer.appendChild(labelEl);
                         });
-
                         container.appendChild(pageContainer);
                         await new Promise(r => setTimeout(r, 100));
-
                         const canvas = await html2canvas(pageContainer, {
-                            scale: 2, useCORS: true, logging: false,
-                            backgroundColor: '#ffffff',
+                            scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
                             width: Math.round(pageWidth * this.MM_TO_PX),
                             height: Math.round(pageHeight * this.MM_TO_PX)
                         });
-
-                        const imgData = canvas.toDataURL('image/png');
-                        pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
+                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageWidth, pageHeight);
                         container.removeChild(pageContainer);
                         pageIndex++;
                         if (onProgress) onProgress(Math.min(startIdx + labelsPerPage, labels.length), labels.length);
                     }
-
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-                    pdf.save(`labels_A4_${timestamp}.pdf`);
+                    pdf.save(`labels_A4_${new Date().toISOString().replace(/[:.]/g, '-').split('T')[0]}.pdf`);
                 }
             } finally {
                 document.body.removeChild(container);
@@ -380,12 +338,14 @@
     const App = {
         currentUser: null,
         labels: [],
+        groups: [],
         selectedLabels: new Set(),
+        currentGroupId: 'all', // 'all' или ID группы
         currentPage: 'labels',
         currentFilter: '',
         importQuantityData: null,
-        isDuplicating: false,              // ← НОВОЕ: флаг режима дублирования
-        duplicateOriginalId: null,         // ← НОВОЕ: ID оригинала при дублировании
+        isDuplicating: false,
+        duplicateOriginalId: null,
 
         init() { Auth.init(); this.bindEvents(); },
 
@@ -395,16 +355,10 @@
             document.getElementById('app').classList.remove('hidden');
             document.getElementById('user-name').textContent = this.currentUser.username;
             this.loadLabels();
+            this.loadGroups();
+            this.renderGroupsSelector();
             this.renderLabels();
             this.updateLabelsCount();
-        },
-
-        // Вспомогательная функция сброса режима дублирования
-        resetDuplicateMode() {
-            this.isDuplicating = false;
-            this.duplicateOriginalId = null;
-            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
-            if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
         },
 
         bindEvents() {
@@ -429,12 +383,44 @@
                 });
                 this.updateBulkActions();
             });
-            document.getElementById('btn-bulk-duplicate').addEventListener('click', () => this.duplicateSelected());
             document.getElementById('btn-bulk-delete').addEventListener('click', () => this.deleteSelected());
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
             document.getElementById('btn-bulk-print').addEventListener('click', () => this.navigateToPrint());
             
-            // Закрытие модального окна редактирования — сбрасываем режим дублирования
+            // НОВОЕ: Дублирование с выбором группы
+            document.getElementById('btn-bulk-duplicate').addEventListener('click', () => this.showDuplicateGroupModal());
+            
+            // НОВОЕ: Кнопки групп
+            document.getElementById('btn-bulk-add-to-group').addEventListener('click', () => this.showAddToGroupModal());
+            document.getElementById('group-selector').addEventListener('change', (e) => {
+                this.currentGroupId = e.target.value;
+                this.selectedLabels.clear();
+                this.renderLabels();
+                this.updateBulkActions();
+                this.updateGroupButtons();
+            });
+            document.getElementById('btn-create-group').addEventListener('click', () => this.showCreateGroupModal());
+            document.getElementById('btn-rename-group').addEventListener('click', () => this.renameCurrentGroup());
+            document.getElementById('btn-delete-group').addEventListener('click', () => this.deleteCurrentGroup());
+            
+            // Модальное окно создания группы
+            document.getElementById('create-group-close').addEventListener('click', () => document.getElementById('create-group-modal').classList.add('hidden'));
+            document.getElementById('btn-cancel-create-group').addEventListener('click', () => document.getElementById('create-group-modal').classList.add('hidden'));
+            document.getElementById('btn-confirm-create-group').addEventListener('click', () => this.confirmCreateGroup());
+            
+            // Модальное окно дублирования с группой
+            document.getElementById('duplicate-group-close').addEventListener('click', () => document.getElementById('duplicate-group-modal').classList.add('hidden'));
+            document.getElementById('btn-cancel-duplicate-group').addEventListener('click', () => document.getElementById('duplicate-group-modal').classList.add('hidden'));
+            document.getElementById('btn-confirm-duplicate-group').addEventListener('click', () => this.confirmDuplicateWithGroup());
+            document.querySelectorAll('input[name="duplicate-target"]').forEach(radio => {
+                radio.addEventListener('change', (e) => this.onDuplicateTargetChange(e.target.value));
+            });
+            
+            // Модальное окно добавления в группу
+            document.getElementById('add-to-group-close').addEventListener('click', () => document.getElementById('add-to-group-modal').classList.add('hidden'));
+            document.getElementById('btn-cancel-add-to-group').addEventListener('click', () => document.getElementById('add-to-group-modal').classList.add('hidden'));
+            document.getElementById('btn-confirm-add-to-group').addEventListener('click', () => this.confirmAddToGroup());
+            
             document.getElementById('modal-close').addEventListener('click', () => {
                 document.getElementById('edit-modal').classList.add('hidden');
                 this.resetDuplicateMode();
@@ -443,17 +429,11 @@
                 document.getElementById('edit-modal').classList.add('hidden');
                 this.resetDuplicateMode();
             });
-            
-            // ЕДИНЫЙ обработчик submit формы — проверяет флаг режима
             document.getElementById('edit-form').addEventListener('submit', (e) => {
                 e.preventDefault();
-                if (this.isDuplicating) {
-                    this.duplicateFromEdit();
-                } else {
-                    this.saveEdit();
-                }
+                if (this.isDuplicating) this.duplicateFromEdit();
+                else this.saveEdit();
             });
-            
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
             document.getElementById('quantity-import-modal-close').addEventListener('click', () => {
@@ -490,15 +470,256 @@
         loadLabels() { this.labels = Storage.getLabels(this.currentUser.id); },
         saveLabels() { Storage.saveLabels(this.currentUser.id, this.labels); this.updateLabelsCount(); },
         updateLabelsCount() { document.getElementById('labels-count').textContent = this.labels.length; },
+        
+        // ==================== ГРУППЫ ====================
+        loadGroups() { this.groups = Storage.getGroups(this.currentUser.id); },
+        saveGroups() { Storage.saveGroups(this.currentUser.id, this.groups); },
 
+        renderGroupsSelector() {
+            const selector = document.getElementById('group-selector');
+            selector.innerHTML = '<option value="all">📋 Все этикетки</option>';
+            this.groups.forEach(group => {
+                const count = this.labels.filter(l => l.groupId === group.id).length;
+                const opt = document.createElement('option');
+                opt.value = group.id;
+                opt.textContent = `📁 ${group.name} (${count})`;
+                if (group.id === this.currentGroupId) opt.selected = true;
+                selector.appendChild(opt);
+            });
+            this.updateGroupButtons();
+            this.updateGroupStats();
+        },
+
+        updateGroupButtons() {
+            const isGroupSelected = this.currentGroupId !== 'all';
+            document.getElementById('btn-rename-group').style.display = isGroupSelected ? '' : 'none';
+            document.getElementById('btn-delete-group').style.display = isGroupSelected ? '' : 'none';
+        },
+
+        updateGroupStats() {
+            const stats = document.getElementById('group-stats');
+            const total = this.labels.length;
+            const inGroup = this.currentGroupId === 'all'
+                ? total
+                : this.labels.filter(l => l.groupId === this.currentGroupId).length;
+            stats.textContent = `Показано: ${inGroup} из ${total}`;
+        },
+
+        showCreateGroupModal() {
+            document.getElementById('new-group-name').value = '';
+            document.getElementById('create-group-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('new-group-name').focus(), 100);
+        },
+
+        confirmCreateGroup() {
+            const name = document.getElementById('new-group-name').value.trim();
+            if (!name) { alert('Введите название группы'); return; }
+            const group = {
+                id: Utils.generateId(),
+                name: name,
+                createdAt: new Date().toISOString()
+            };
+            this.groups.push(group);
+            this.saveGroups();
+            this.currentGroupId = group.id;
+            this.renderGroupsSelector();
+            document.getElementById('group-selector').value = group.id;
+            document.getElementById('create-group-modal').classList.add('hidden');
+            Utils.showToast(`Группа "${name}" создана`);
+        },
+
+        renameCurrentGroup() {
+            const group = this.groups.find(g => g.id === this.currentGroupId);
+            if (!group) return;
+            const newName = prompt('Новое название группы:', group.name);
+            if (newName && newName.trim()) {
+                group.name = newName.trim();
+                this.saveGroups();
+                this.renderGroupsSelector();
+                document.getElementById('group-selector').value = group.id;
+                Utils.showToast('Группа переименована');
+            }
+        },
+
+        deleteCurrentGroup() {
+            const group = this.groups.find(g => g.id === this.currentGroupId);
+            if (!group) return;
+            const count = this.labels.filter(l => l.groupId === group.id).length;
+            if (!confirm(`Удалить группу "${group.name}"?\n\nЭтикетки (${count} шт.) останутся, но без группы.`)) return;
+            this.labels.forEach(l => { if (l.groupId === group.id) l.groupId = null; });
+            this.groups = this.groups.filter(g => g.id !== group.id);
+            this.saveGroups();
+            this.saveLabels();
+            this.currentGroupId = 'all';
+            this.renderGroupsSelector();
+            document.getElementById('group-selector').value = 'all';
+            this.renderLabels();
+            Utils.showToast('Группа удалена');
+        },
+
+        showAddToGroupModal() {
+            if (this.selectedLabels.size === 0) { Utils.showToast('Выберите этикетки'); return; }
+            const select = document.getElementById('add-to-group-select');
+            select.innerHTML = '<option value="">-- Выберите группу --</option>';
+            this.groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.name;
+                select.appendChild(opt);
+            });
+            document.getElementById('add-to-new-group-name').value = '';
+            document.getElementById('add-to-group-modal').classList.remove('hidden');
+        },
+
+        confirmAddToGroup() {
+            const existingGroupId = document.getElementById('add-to-group-select').value;
+            const newGroupName = document.getElementById('add-to-new-group-name').value.trim();
+            
+            let targetGroupId = existingGroupId;
+            
+            if (!targetGroupId && newGroupName) {
+                const group = {
+                    id: Utils.generateId(),
+                    name: newGroupName,
+                    createdAt: new Date().toISOString()
+                };
+                this.groups.push(group);
+                this.saveGroups();
+                targetGroupId = group.id;
+            }
+            
+            if (!targetGroupId) { alert('Выберите или создайте группу'); return; }
+            
+            let count = 0;
+            this.selectedLabels.forEach(id => {
+                const label = this.labels.find(l => l.id === id);
+                if (label) { label.groupId = targetGroupId; label.updatedAt = new Date().toISOString(); count++; }
+            });
+            
+            this.saveLabels();
+            this.renderGroupsSelector();
+            document.getElementById('group-selector').value = targetGroupId;
+            this.currentGroupId = targetGroupId;
+            this.renderLabels();
+            this.selectedLabels.clear();
+            this.updateBulkActions();
+            document.getElementById('add-to-group-modal').classList.add('hidden');
+            Utils.showToast(`Добавлено в группу: ${count}`);
+        },
+
+        // ==================== ДУБЛИРОВАНИЕ С ВЫБОРОМ ГРУППЫ ====================
+        showDuplicateGroupModal() {
+            if (this.selectedLabels.size === 0) { Utils.showToast('Выберите этикетки'); return; }
+            
+            // Сбрасываем состояние
+            document.querySelector('input[name="duplicate-target"][value="current"]').checked = true;
+            document.getElementById('existing-groups-list').style.display = 'none';
+            document.getElementById('new-group-for-duplicate').style.display = 'none';
+            document.getElementById('duplicate-new-group-name').value = '';
+            
+            // Заполняем список существующих групп
+            const list = document.getElementById('existing-groups-list');
+            list.innerHTML = '';
+            if (this.groups.length === 0) {
+                list.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;padding:8px;">Групп пока нет. Создайте первую!</p>';
+            } else {
+                this.groups.forEach(g => {
+                    const item = document.createElement('div');
+                    item.className = 'group-select-item';
+                    item.dataset.groupId = g.id;
+                    item.textContent = g.name;
+                    item.addEventListener('click', () => {
+                        list.querySelectorAll('.group-select-item').forEach(i => i.classList.remove('selected'));
+                        item.classList.add('selected');
+                    });
+                    list.appendChild(item);
+                });
+            }
+            
+            document.getElementById('duplicate-group-modal').classList.remove('hidden');
+        },
+
+        onDuplicateTargetChange(value) {
+            document.getElementById('existing-groups-list').style.display = value === 'existing' ? '' : 'none';
+            document.getElementById('new-group-for-duplicate').style.display = value === 'new' ? '' : 'none';
+        },
+
+        confirmDuplicateWithGroup() {
+            const target = document.querySelector('input[name="duplicate-target"]:checked').value;
+            let targetGroupId = null;
+            
+            if (target === 'current') {
+                targetGroupId = this.currentGroupId === 'all' ? null : this.currentGroupId;
+            } else if (target === 'existing') {
+                const selected = document.querySelector('#existing-groups-list .group-select-item.selected');
+                if (!selected) { alert('Выберите группу'); return; }
+                targetGroupId = selected.dataset.groupId;
+            } else if (target === 'new') {
+                const name = document.getElementById('duplicate-new-group-name').value.trim();
+                if (!name) { alert('Введите название новой группы'); return; }
+                const group = {
+                    id: Utils.generateId(),
+                    name: name,
+                    createdAt: new Date().toISOString()
+                };
+                this.groups.push(group);
+                this.saveGroups();
+                targetGroupId = group.id;
+            }
+            
+            // Создаём дубликаты
+            const newLabels = [];
+            this.selectedLabels.forEach(id => {
+                const label = this.labels.find(l => l.id === id);
+                if (label) {
+                    newLabels.push({
+                        ...label,
+                        id: Utils.generateId(),
+                        groupId: targetGroupId,
+                        quantity: 0,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            });
+            
+            this.labels.push(...newLabels);
+            this.saveLabels();
+            this.selectedLabels.clear();
+            
+            // Если создали новую группу — переключаемся на неё
+            if (target === 'new') {
+                this.currentGroupId = targetGroupId;
+                document.getElementById('group-selector').value = targetGroupId;
+            }
+            
+            this.renderGroupsSelector();
+            this.renderLabels();
+            this.updateBulkActions();
+            document.getElementById('duplicate-group-modal').classList.add('hidden');
+            Utils.showToast(`Дублировано: ${newLabels.length}`);
+        },
+
+        // ==================== ТАБЛИЦА ====================
         renderLabels() {
             const tbody = document.getElementById('labels-tbody');
             tbody.innerHTML = '';
+            
+            // Фильтр по группе
             let filtered = this.labels;
-            if (this.currentFilter) {
-                filtered = this.labels.filter(l => Object.values(l).some(v => String(v).toLowerCase().includes(this.currentFilter)));
+            if (this.currentGroupId !== 'all') {
+                filtered = filtered.filter(l => l.groupId === this.currentGroupId);
             }
+            
+            // Фильтр по поиску
+            if (this.currentFilter) {
+                filtered = filtered.filter(l =>
+                    Object.values(l).some(v => String(v).toLowerCase().includes(this.currentFilter))
+                );
+            }
+
             filtered.forEach(label => {
+                const group = label.groupId ? this.groups.find(g => g.id === label.groupId) : null;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><input type="checkbox" class="label-checkbox" data-id="${label.id}" ${this.selectedLabels.has(label.id) ? 'checked' : ''}></td>
@@ -515,7 +736,11 @@
                     <td>${Utils.escapeHtml(label.name || '')}</td>
                     <td>${Utils.escapeHtml(label.seller || '')}</td>
                     <td>${Utils.escapeHtml(label.gtin || '')}</td>
-                    <td style="font-size:11px"><div>Создана: ${Utils.formatDate(label.createdAt)}</div><div>Изменена: ${Utils.formatDate(label.updatedAt || label.createdAt)}</div></td>
+                    <td style="font-size:11px">
+                        <div>Создана: ${Utils.formatDate(label.createdAt)}</div>
+                        <div>Изменена: ${Utils.formatDate(label.updatedAt || label.createdAt)}</div>
+                        ${group ? `<div class="group-badge">📁 ${Utils.escapeHtml(group.name)}</div>` : ''}
+                    </td>
                     <td><div class="action-buttons">
                         <button class="action-btn btn-edit" data-id="${label.id}">✏️</button>
                         <button class="action-btn btn-duplicate" data-id="${label.id}">📑</button>
@@ -524,6 +749,7 @@
                 `;
                 tbody.appendChild(tr);
             });
+
             document.querySelectorAll('.label-checkbox').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     if (e.target.checked) this.selectedLabels.add(e.target.dataset.id);
@@ -538,6 +764,8 @@
             document.querySelectorAll('.btn-edit').forEach(btn => btn.addEventListener('click', (e) => this.openEditModal(e.target.dataset.id)));
             document.querySelectorAll('.btn-duplicate').forEach(btn => btn.addEventListener('click', (e) => this.duplicateLabelWithEdit(e.target.dataset.id)));
             document.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', (e) => this.deleteLabel(e.target.dataset.id)));
+            
+            this.updateGroupStats();
         },
 
         updateBulkActions() {
@@ -574,12 +802,14 @@
                 composition: formData.get('composition'),
                 manufacturer: formData.get('manufacturer'),
                 quantity: parseInt(formData.get('quantity')) || 0,
+                groupId: this.currentGroupId === 'all' ? null : this.currentGroupId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
             this.labels.push(label);
             this.saveLabels();
             form.reset();
+            this.renderGroupsSelector();
             Utils.showToast('Этикетка создана');
             this.navigate('labels');
         },
@@ -635,31 +865,24 @@
             Utils.showToast('Сохранено');
         },
 
-        // ИСПРАВЛЕНО: больше не перезаписываем form.onsubmit, используем флаг
         duplicateLabelWithEdit(id) {
-            const originalLabel = this.labels.find(l => l.id === id);
-            if (!originalLabel) return;
-            
-            // Заполняем форму данными оригинала
             this.openEditModal(id);
-            
-            // Устанавливаем режим дублирования
+            document.querySelector('#edit-modal .modal-header h2').textContent = 'Дублировать этикетку';
             this.isDuplicating = true;
             this.duplicateOriginalId = id;
-            
-            // Меняем заголовок модального окна
-            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
-            if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
+            const restore = () => {
+                document.querySelector('#edit-modal .modal-header h2').textContent = 'Редактировать этикетку';
+                this.isDuplicating = false;
+                this.duplicateOriginalId = null;
+            };
+            document.getElementById('modal-close').onclick = restore;
+            document.getElementById('btn-cancel-edit').onclick = restore;
         },
 
-        // ИСПРАВЛЕНО: создаём полностью новый объект, не трогая оригинал
         duplicateFromEdit() {
             if (!this.duplicateOriginalId) return;
-            
             const form = document.getElementById('edit-form');
             const formData = new FormData(form);
-            
-            // Создаём НОВУЮ карточку с новыми данными из формы
             const newLabel = {
                 id: Utils.generateId(),
                 article: formData.get('article'),
@@ -675,18 +898,21 @@
                 composition: formData.get('composition'),
                 manufacturer: formData.get('manufacturer'),
                 quantity: parseInt(formData.get('quantity')) || 0,
+                groupId: this.currentGroupId === 'all' ? null : this.currentGroupId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
-            
-            // Добавляем только новую карточку, оригинал не трогаем
             this.labels.push(newLabel);
             this.saveLabels();
             this.renderLabels();
-            
             document.getElementById('edit-modal').classList.add('hidden');
             this.resetDuplicateMode();
             Utils.showToast('Этикетка дублирована');
+        },
+
+        resetDuplicateMode() {
+            this.isDuplicating = false;
+            this.duplicateOriginalId = null;
         },
 
         duplicateSelected() {
@@ -708,6 +934,7 @@
             this.labels = this.labels.filter(l => l.id !== id);
             this.selectedLabels.delete(id);
             this.saveLabels();
+            this.renderGroupsSelector();
             this.renderLabels();
             this.updateBulkActions();
             Utils.showToast('Удалено');
@@ -718,6 +945,7 @@
             this.labels = this.labels.filter(l => !this.selectedLabels.has(l.id));
             this.selectedLabels.clear();
             this.saveLabels();
+            this.renderGroupsSelector();
             this.renderLabels();
             this.updateBulkActions();
             Utils.showToast('Удалено');
@@ -798,16 +1026,7 @@
             }
 
             preview.innerHTML = '';
-            preview.style.cssText = `
-                border: 2px dashed #E5E7EB;
-                border-radius: 12px;
-                padding: 20px;
-                background: #F9FAFB;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                overflow: auto;
-            `;
+            preview.style.cssText = `border:2px dashed #E5E7EB;border-radius:12px;padding:20px;background:#F9FAFB;display:flex;flex-direction:column;align-items:center;overflow:auto;`;
 
             if (printType === 'thermal') {
                 const info = document.createElement('div');
@@ -815,7 +1034,6 @@
                 const orientText = orientation === 'landscape' ? 'альбомная' : 'книжная';
                 info.textContent = `🏷️ Термоэтикетка: ${labelWidth}×${labelHeight} мм (${orientText}, 1 этикетка = 1 страница)`;
                 preview.appendChild(info);
-
                 const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
                 labelEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                 preview.appendChild(labelEl);
@@ -828,38 +1046,24 @@
                 const cols = Math.max(1, Math.floor((usableWidth + gap) / (labelWidth + gap)));
                 const rows = Math.max(1, Math.floor((usableHeight + gap) / (labelHeight + gap)));
                 const labelsPerPage = cols * rows;
-
                 const info = document.createElement('div');
                 info.style.cssText = 'margin-bottom:12px;font-size:13px;color:#6B7280;';
                 const orientText = orientation === 'landscape' ? 'альбомная' : 'книжная';
                 info.textContent = `📄 A4: ${cols}×${rows} = ${labelsPerPage} этикеток на листе (зазор ${gap} мм, ${orientText})`;
                 preview.appendChild(info);
-
-                const maxPreviewWidth = 320;
-                const scale = maxPreviewWidth / pageWidth;
-
-                const a4Wrapper = document.createElement('div');
-                a4Wrapper.style.cssText = `
-                    width: ${pageWidth * scale}px;
-                    height: ${pageHeight * scale}px;
-                    background: white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    position: relative;
-                    overflow: hidden;
-                `;
-
+                const scale = Math.min(280 / pageWidth, 400 / pageHeight);
+                const a4Div = document.createElement('div');
+                a4Div.style.cssText = `width:${pageWidth * scale}px;height:${pageHeight * scale}px;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.1);position:relative;overflow:hidden;`;
                 const gridWidth = cols * labelWidth + (cols - 1) * gap;
                 const gridHeight = rows * labelHeight + (rows - 1) * gap;
                 const offsetX = margin + (usableWidth - gridWidth) / 2;
                 const offsetY = margin + (usableHeight - gridHeight) / 2;
-
                 const previewCount = Math.min(labelsPerPage, 12);
                 for (let i = 0; i < previewCount; i++) {
                     const col = i % cols;
                     const row = Math.floor(i / cols);
                     const x = offsetX + col * (labelWidth + gap);
                     const y = offsetY + row * (labelHeight + gap);
-
                     const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
                     labelEl.style.position = 'absolute';
                     labelEl.style.left = (x * scale) + 'px';
@@ -867,10 +1071,9 @@
                     labelEl.style.transform = `scale(${scale})`;
                     labelEl.style.transformOrigin = 'top left';
                     labelEl.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
-                    a4Wrapper.appendChild(labelEl);
+                    a4Div.appendChild(labelEl);
                 }
-
-                preview.appendChild(a4Wrapper);
+                preview.appendChild(a4Div);
             }
         },
 
@@ -896,11 +1099,8 @@
                 labelsToPrint = this.labels.filter(l => this.labelsForPrint.includes(l.id));
             } else if (this.selectedLabels.size > 0) {
                 labelsToPrint = this.labels.filter(l => this.selectedLabels.has(l.id));
-            } else {
-                labelsToPrint = this.labels;
-            }
+            } else { labelsToPrint = this.labels; }
             if (labelsToPrint.length === 0) { Utils.showToast('Нет этикеток'); return; }
-
             const expanded = [];
             labelsToPrint.forEach(label => {
                 const qty = label.quantity || 1;
@@ -915,8 +1115,7 @@
 
             try {
                 await PDFGenerator.generateLabelsPDF(expanded, settings, (done, total) => {
-                    const percent = (done / total) * 100;
-                    document.getElementById('pdf-progress-fill').style.width = percent + '%';
+                    document.getElementById('pdf-progress-fill').style.width = ((done / total) * 100) + '%';
                     document.getElementById('pdf-progress-text').textContent = done + ' / ' + total;
                 });
                 progressToast.remove();
@@ -982,12 +1181,14 @@
                 composition: String(row['Состав'] || row['composition'] || ''),
                 manufacturer: String(row['Производитель'] || row['manufacturer'] || ''),
                 quantity: parseInt(row['Количество'] || row['quantity'] || 0),
+                groupId: this.currentGroupId === 'all' ? null : this.currentGroupId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             })).filter(l => l.article && l.barcode);
 
             this.labels.push(...newLabels);
             this.saveLabels();
+            this.renderGroupsSelector();
             this.renderLabels();
             Utils.showToast(`Импортировано: ${newLabels.length}`);
             document.getElementById('import-preview').classList.add('hidden');
@@ -1010,12 +1211,16 @@
 
         exportToExcel() {
             if (this.labels.length === 0) { Utils.showToast('Нет данных'); return; }
-            const data = this.labels.map(l => ({
-                'Артикул': l.article, 'Штрихкод': l.barcode, 'Цвет': l.color || '', 'Размер': l.size || '',
-                'Название товара': l.name || '', 'Наименование продавца': l.seller || '', 'GTIN': l.gtin || '',
-                'Количество': l.quantity || 0, 'Бренд': l.brand || '', 'Срок годности': l.expiry || '',
-                'Создана': l.createdAt, 'Изменена': l.updatedAt || l.createdAt
-            }));
+            const data = this.labels.map(l => {
+                const group = l.groupId ? this.groups.find(g => g.id === l.groupId) : null;
+                return {
+                    'Артикул': l.article, 'Штрихкод': l.barcode, 'Цвет': l.color || '', 'Размер': l.size || '',
+                    'Название товара': l.name || '', 'Наименование продавца': l.seller || '', 'GTIN': l.gtin || '',
+                    'Количество': l.quantity || 0, 'Бренд': l.brand || '', 'Срок годности': l.expiry || '',
+                    'Группа': group ? group.name : '',
+                    'Создана': l.createdAt, 'Изменена': l.updatedAt || l.createdAt
+                };
+            });
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Этикетки');
