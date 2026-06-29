@@ -112,7 +112,6 @@
         MM_TO_PX: 3.7795,
         SAFE_MARGIN: 1.5,
 
-        // Измеряет сколько строк займёт текст при заданном размере шрифта
         measureTextLines(text, fontSizePt, maxWidthMm) {
             if (!text) return 0;
             const charsPerMm = fontSizePt * 0.6 * 0.264583;
@@ -132,7 +131,6 @@
             return lines;
         },
 
-        // Вычисляет оптимальный размер шрифта для текста в заданной области
         calculateOptimalFontSize(text, maxWidthMm, maxHeightMm, minSize = 5, maxSize = 7.5) {
             if (!text) return maxSize;
             let fontSize = maxSize;
@@ -146,7 +144,6 @@
             return minSize;
         },
 
-        // Создаёт HTML-элемент этикетки с умным масштабированием
         createLabelElement(label, settings, widthMm, heightMm) {
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
@@ -157,7 +154,6 @@
             const availableWidth = widthMm - (this.SAFE_MARGIN * 2);
             const availableHeight = heightMm - (this.SAFE_MARGIN * 2);
 
-            // Приоритет штрихкода: 30-40% высоты
             const barcodeHeightRatio = 0.35;
             const barcodeHeight = (!barcodeOnly && !noBarcode) ? availableHeight * barcodeHeightRatio : 0;
             const barcodeNumberHeight = 3;
@@ -181,7 +177,6 @@
 
             let html = '';
 
-            // Штрихкод
             if (!noBarcode) {
                 const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
                 const bcH = barcodeOnly ? availableHeight * 0.7 : barcodeHeight;
@@ -191,9 +186,7 @@
                 </div>`;
             }
 
-            // Текст
             if (!barcodeOnly) {
-                // Собираем все текстовые элементы с приоритетами
                 const elements = [];
                 elements.push({ text: `Артикул: ${label.article}`, bold: true, maxSize: 7.5, minSize: 5, priority: 1 });
                 if (label.name) elements.push({ text: label.name, bold: false, maxSize: 7, minSize: 5, priority: 2 });
@@ -212,7 +205,6 @@
                 if (label.brand) elements.push({ text: `Бренд: ${label.brand}`, bold: true, maxSize: 7, minSize: 5, priority: 5 });
                 if (label.expiry) elements.push({ text: `Срок годности: ${label.expiry}`, bold: false, maxSize: 6, minSize: 5, priority: 6 });
 
-                // Пропорциональное распределение высоты
                 const totalPriority = elements.reduce((sum, el) => sum + el.priority, 0);
                 const elementHeights = elements.map(el => {
                     const share = (el.priority / totalPriority) * textAvailableHeight;
@@ -220,7 +212,6 @@
                     return { ...el, fontSize, share };
                 });
 
-                // Рендерим текст с переносами
                 elementHeights.forEach(el => {
                     const lineHeight = el.fontSize * 0.35;
                     const charsPerMm = el.fontSize * 0.6 * 0.264583;
@@ -247,7 +238,6 @@
 
             div.innerHTML = html;
 
-            // Генерируем штрихкод
             setTimeout(() => {
                 try {
                     const svg = div.querySelector('svg');
@@ -312,7 +302,6 @@
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
                     pdf.save(`labels_${timestamp}.pdf`);
                 } else {
-                    // A4 с учётом ориентации
                     const pageWidth = orientation === 'landscape' ? 297 : 210;
                     const pageHeight = orientation === 'landscape' ? 210 : 297;
                     const margin = 5;
@@ -395,6 +384,8 @@
         currentPage: 'labels',
         currentFilter: '',
         importQuantityData: null,
+        isDuplicating: false,              // ← НОВОЕ: флаг режима дублирования
+        duplicateOriginalId: null,         // ← НОВОЕ: ID оригинала при дублировании
 
         init() { Auth.init(); this.bindEvents(); },
 
@@ -406,6 +397,14 @@
             this.loadLabels();
             this.renderLabels();
             this.updateLabelsCount();
+        },
+
+        // Вспомогательная функция сброса режима дублирования
+        resetDuplicateMode() {
+            this.isDuplicating = false;
+            this.duplicateOriginalId = null;
+            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
+            if (modalTitle) modalTitle.textContent = 'Редактировать этикетку';
         },
 
         bindEvents() {
@@ -434,9 +433,27 @@
             document.getElementById('btn-bulk-delete').addEventListener('click', () => this.deleteSelected());
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
             document.getElementById('btn-bulk-print').addEventListener('click', () => this.navigateToPrint());
-            document.getElementById('modal-close').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
-            document.getElementById('btn-cancel-edit').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
-            document.getElementById('edit-form').addEventListener('submit', (e) => { e.preventDefault(); this.saveEdit(); });
+            
+            // Закрытие модального окна редактирования — сбрасываем режим дублирования
+            document.getElementById('modal-close').addEventListener('click', () => {
+                document.getElementById('edit-modal').classList.add('hidden');
+                this.resetDuplicateMode();
+            });
+            document.getElementById('btn-cancel-edit').addEventListener('click', () => {
+                document.getElementById('edit-modal').classList.add('hidden');
+                this.resetDuplicateMode();
+            });
+            
+            // ЕДИНЫЙ обработчик submit формы — проверяет флаг режима
+            document.getElementById('edit-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (this.isDuplicating) {
+                    this.duplicateFromEdit();
+                } else {
+                    this.saveEdit();
+                }
+            });
+            
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
             document.getElementById('quantity-import-modal-close').addEventListener('click', () => {
@@ -444,7 +461,6 @@
                 this.importQuantityData = null;
             });
 
-            // Обновление превью при изменении настроек
             ['print-barcode-format', 'print-text-size', 'print-center-text', 'print-barcode-only',
              'print-no-barcode', 'print-color-size-row', 'print-label-size', 'print-type', 'print-gap', 'print-orientation'].forEach(id => {
                 const el = document.getElementById(id);
@@ -615,29 +631,35 @@
             this.saveLabels();
             this.renderLabels();
             document.getElementById('edit-modal').classList.add('hidden');
+            this.resetDuplicateMode();
             Utils.showToast('Сохранено');
         },
 
+        // ИСПРАВЛЕНО: больше не перезаписываем form.onsubmit, используем флаг
         duplicateLabelWithEdit(id) {
+            const originalLabel = this.labels.find(l => l.id === id);
+            if (!originalLabel) return;
+            
+            // Заполняем форму данными оригинала
             this.openEditModal(id);
-            document.querySelector('#edit-modal .modal-header h2').textContent = 'Дублировать этикетку';
+            
+            // Устанавливаем режим дублирования
+            this.isDuplicating = true;
             this.duplicateOriginalId = id;
-            const form = document.getElementById('edit-form');
-            const origSubmit = form.onsubmit;
-            form.onsubmit = (e) => { e.preventDefault(); this.duplicateFromEdit(); };
-            const restore = () => {
-                document.querySelector('#edit-modal .modal-header h2').textContent = 'Редактировать этикетку';
-                form.onsubmit = origSubmit;
-                this.duplicateOriginalId = null;
-            };
-            document.getElementById('modal-close').onclick = restore;
-            document.getElementById('btn-cancel-edit').onclick = restore;
+            
+            // Меняем заголовок модального окна
+            const modalTitle = document.querySelector('#edit-modal .modal-header h2');
+            if (modalTitle) modalTitle.textContent = 'Дублировать этикетку (внесите изменения при необходимости)';
         },
 
+        // ИСПРАВЛЕНО: создаём полностью новый объект, не трогая оригинал
         duplicateFromEdit() {
             if (!this.duplicateOriginalId) return;
+            
             const form = document.getElementById('edit-form');
             const formData = new FormData(form);
+            
+            // Создаём НОВУЮ карточку с новыми данными из формы
             const newLabel = {
                 id: Utils.generateId(),
                 article: formData.get('article'),
@@ -656,11 +678,15 @@
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
+            
+            // Добавляем только новую карточку, оригинал не трогаем
             this.labels.push(newLabel);
             this.saveLabels();
             this.renderLabels();
+            
             document.getElementById('edit-modal').classList.add('hidden');
-            Utils.showToast('Дублировано');
+            this.resetDuplicateMode();
+            Utils.showToast('Этикетка дублирована');
         },
 
         duplicateSelected() {
@@ -751,7 +777,6 @@
             Utils.showToast(`Обновлено: ${count}`);
         },
 
-        // ==================== ПРЕДПРОСМОТР ====================
         updatePrintPreview() {
             const preview = document.getElementById('label-preview');
             const printType = document.getElementById('print-type').value;
@@ -795,7 +820,6 @@
                 labelEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                 preview.appendChild(labelEl);
             } else {
-                // A4 с учётом ориентации
                 const pageWidth = orientation === 'landscape' ? 297 : 210;
                 const pageHeight = orientation === 'landscape' ? 210 : 297;
                 const margin = 5;
@@ -811,7 +835,6 @@
                 info.textContent = `📄 A4: ${cols}×${rows} = ${labelsPerPage} этикеток на листе (зазор ${gap} мм, ${orientText})`;
                 preview.appendChild(info);
 
-                // Масштабируем A4 для превью
                 const maxPreviewWidth = 320;
                 const scale = maxPreviewWidth / pageWidth;
 
@@ -837,9 +860,7 @@
                     const x = offsetX + col * (labelWidth + gap);
                     const y = offsetY + row * (labelHeight + gap);
 
-                    // Создаём этикетку реального размера
                     const labelEl = PDFGenerator.createLabelElement(label, settings, labelWidth, labelHeight);
-                    // Масштабируем через CSS transform
                     labelEl.style.position = 'absolute';
                     labelEl.style.left = (x * scale) + 'px';
                     labelEl.style.top = (y * scale) + 'px';
