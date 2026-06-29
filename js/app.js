@@ -4,18 +4,10 @@
 
     // ==================== ХРАНИЛИЩЕ ====================
     const Storage = {
-        getUsers() {
-            return JSON.parse(localStorage.getItem('lm_users') || '[]');
-        },
-        saveUsers(users) {
-            localStorage.setItem('lm_users', JSON.stringify(users));
-        },
-        getCurrentUser() {
-            return JSON.parse(localStorage.getItem('lm_current_user') || 'null');
-        },
-        setCurrentUser(user) {
-            localStorage.setItem('lm_current_user', JSON.stringify(user));
-        },
+        getUsers() { return JSON.parse(localStorage.getItem('lm_users') || '[]'); },
+        saveUsers(users) { localStorage.setItem('lm_users', JSON.stringify(users)); },
+        getCurrentUser() { return JSON.parse(localStorage.getItem('lm_current_user') || 'null'); },
+        setCurrentUser(user) { localStorage.setItem('lm_current_user', JSON.stringify(user)); },
         getLabels(userId) {
             const all = JSON.parse(localStorage.getItem('lm_labels') || '{}');
             return all[userId] || [];
@@ -29,9 +21,7 @@
 
     // ==================== УТИЛИТЫ ====================
     const Utils = {
-        generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        },
+        generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); },
         detectBarcodeFormat(barcode) {
             if (!barcode) return 'CODE128';
             const clean = barcode.replace(/\D/g, '');
@@ -113,7 +103,6 @@
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
             const user = Storage.getUsers().find(u => u.username === username && u.password === password);
-            
             if (user) {
                 Storage.setCurrentUser(user);
                 App.showMainApp();
@@ -125,25 +114,21 @@
         register() {
             const username = document.getElementById('reg-username').value.trim();
             const password = document.getElementById('reg-password').value;
-            
             if (password !== document.getElementById('reg-password-confirm').value) {
                 alert('Пароли не совпадают');
                 return;
             }
-            
             const users = Storage.getUsers();
             if (users.find(u => u.username === username)) {
                 alert('Пользователь уже существует');
                 return;
             }
-            
             const newUser = {
                 id: Utils.generateId(),
                 username: username,
                 password: password,
                 createdAt: new Date().toISOString()
             };
-            
             users.push(newUser);
             Storage.saveUsers(users);
             Storage.setCurrentUser(newUser);
@@ -159,21 +144,33 @@
     // ==================== ГЕНЕРАЦИЯ PDF ====================
     const PDFGenerator = {
         MM_TO_PX: 3.7795,
+        cancelGeneration: false,
         
         createLabelElement(label, settings, widthMm, heightMm) {
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
+            const orientation = settings.orientation || 'portrait';
+            
+            // Рассчитываем масштаб элементов относительно базового размера 58x38.6
+            const baseWidth = 58;
+            const baseHeight = 38.6;
+            const scale = Math.min(widthMm / baseWidth, heightMm / baseHeight);
+            const fontSize = Math.max(6, parseInt(settings.textSize) || 8) * scale;
             
             const div = document.createElement('div');
             div.className = 'pdf-label';
+            
+            // Поворачиваем если альбомная ориентация
+            const isLandscape = orientation === 'landscape';
             div.style.cssText = `
                 width: ${widthMm}mm;
                 height: ${heightMm}mm;
-                padding: 1.5mm;
+                padding: ${2 * scale}mm;
                 box-sizing: border-box;
                 font-family: Arial, sans-serif;
+                font-size: ${fontSize}pt;
                 text-align: ${centerText ? 'center' : 'left'};
                 background: white;
                 overflow: hidden;
@@ -181,109 +178,62 @@
                 flex-direction: column;
                 justify-content: flex-start;
                 position: relative;
+                transform: ${isLandscape ? 'rotate(90deg) translateX(100%)' : 'none'};
+                transform-origin: top left;
             `;
-
+            
             let html = '';
-            let usedHeight = 0;
-            const maxHeight = heightMm - 3;
-
+            
+            // Штрихкод с увеличенными отступами
             if (!barcodeOnly && !noBarcode) {
                 const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
-                const bcHeight = Math.min(12, heightMm * 0.3);
-                html += `<div style="margin-bottom:0.5mm;text-align:center;height:${bcHeight}mm;">
+                const bcHeight = Math.min(15 * scale, heightMm * 0.35);
+                html += `<div style="margin-bottom:${1.5 * scale}mm;text-align:center;height:${bcHeight}mm;">
                     <svg id="${bcId}" style="width:100%;height:${bcHeight}mm;"></svg>
-                    <div style="font-size:5pt;margin-top:0.3mm;word-break:break-all;line-height:1;">${Utils.escapeHtml(label.barcode)}</div>
+                    <div style="font-size:${fontSize * 0.7}pt;margin-top:${0.5 * scale}mm;word-break:break-all;line-height:1.2;">${Utils.escapeHtml(label.barcode)}</div>
                 </div>`;
-                usedHeight += bcHeight + 1;
             }
-
+            
             if (!barcodeOnly) {
-                const availableHeight = maxHeight - usedHeight;
-                const textLines = [];
+                // Артикул
+                html += `<div style="font-weight:bold;margin-bottom:${0.5 * scale}mm;">Артикул: ${Utils.escapeHtml(label.article)}</div>`;
                 
-                textLines.push({ text: `Артикул: ${label.article}`, bold: true, size: 7 });
-                
+                // Название
                 if (label.name) {
-                    textLines.push({ text: label.name, bold: false, size: 6.5 });
+                    html += `<div style="margin-bottom:${0.5 * scale}mm;">${Utils.escapeHtml(label.name)}</div>`;
                 }
                 
+                // Цвет и размер
                 if (colorSizeRow) {
                     let cs = '';
                     if (label.color) cs += `Цвет: ${label.color}`;
                     if (label.color && label.size) cs += ' / ';
                     if (label.size) cs += `Разм.: ${label.size}`;
-                    if (cs) textLines.push({ text: cs, bold: false, size: 6 });
+                    if (cs) html += `<div style="margin-bottom:${0.5 * scale}mm;">${cs}</div>`;
                 } else {
-                    if (label.color) textLines.push({ text: `Цвет: ${label.color}`, bold: false, size: 6 });
-                    if (label.size) textLines.push({ text: `Размер: ${label.size}`, bold: false, size: 6 });
+                    if (label.color) html += `<div style="margin-bottom:${0.5 * scale}mm;">Цвет: ${Utils.escapeHtml(label.color)}</div>`;
+                    if (label.size) html += `<div style="margin-bottom:${0.5 * scale}mm;">Размер: ${Utils.escapeHtml(label.size)}</div>`;
                 }
                 
+                // Продавец
                 if (label.seller) {
-                    textLines.push({ text: label.seller, bold: false, size: 6 });
+                    html += `<div style="margin-bottom:${0.5 * scale}mm;">${Utils.escapeHtml(label.seller)}</div>`;
                 }
                 
+                // Бренд
                 if (label.brand) {
-                    textLines.push({ text: `Бренд: ${label.brand}`, bold: true, size: 6.5 });
+                    html += `<div style="font-weight:bold;margin-bottom:${0.5 * scale}mm;">Бренд: ${Utils.escapeHtml(label.brand)}</div>`;
                 }
                 
+                // Срок годности
                 if (label.expiry) {
-                    textLines.push({ text: `Срок годности: ${label.expiry}`, bold: false, size: 5.5 });
+                    html += `<div>Срок годности: ${Utils.escapeHtml(label.expiry)}</div>`;
                 }
-                
-                const maxLineWidth = widthMm - 3;
-                let fontSize = 7;
-                let totalLines = 0;
-                
-                textLines.forEach(line => {
-                    const charsPerLine = Math.floor(maxLineWidth / (line.size * 0.6 * 0.264583));
-                    const words = line.text.split(' ');
-                    let currentLine = '';
-                    let lineCount = 0;
-                    
-                    words.forEach(word => {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        if (testLine.length > charsPerLine && currentLine) {
-                            lineCount++;
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    });
-                    if (currentLine) lineCount++;
-                    totalLines += lineCount;
-                });
-                
-                const maxLines = Math.floor(availableHeight / (fontSize * 0.35));
-                if (totalLines > maxLines) {
-                    fontSize = fontSize * (maxLines / totalLines) * 0.9;
-                    fontSize = Math.max(4.5, Math.min(7, fontSize));
-                }
-                
-                textLines.forEach(line => {
-                    const charsPerLine = Math.floor(maxLineWidth / (fontSize * 0.6 * 0.264583));
-                    const words = line.text.split(' ');
-                    let currentLine = '';
-                    const wrappedLines = [];
-                    
-                    words.forEach(word => {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        if (testLine.length > charsPerLine && currentLine) {
-                            wrappedLines.push(currentLine);
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    });
-                    if (currentLine) wrappedLines.push(currentLine);
-                    
-                    wrappedLines.forEach(wLine => {
-                        html += `<div style="font-size:${fontSize}pt;line-height:1.1;margin:0.2mm 0;font-weight:${line.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(wLine)}</div>`;
-                    });
-                });
             }
-
+            
             div.innerHTML = html;
-
+            
+            // Генерируем штрихкод
             setTimeout(() => {
                 try {
                     const svg = div.querySelector('svg');
@@ -293,27 +243,27 @@
                             : settings.barcodeFormat;
                         JsBarcode(svg, label.barcode, {
                             format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                            width: 1,
-                            height: 35,
+                            width: 1.2 * scale,
+                            height: 40 * scale,
                             displayValue: false,
-                            margin: 0,
-                            textMargin: 0
+                            margin: 0
                         });
                     }
-                } catch (e) { 
-                    console.error('Barcode error:', e); 
+                } catch (e) {
+                    console.error('Barcode error:', e);
                 }
             }, 10);
-
+            
             return div;
         },
         
         async generateLabelsPDF(labels, settings, onProgress) {
             const { jsPDF } = window.jspdf;
             if (!window.html2canvas) {
-                throw new Error('html2canvas не загружен. Проверьте подключение скриптов.');
+                throw new Error('html2canvas не загружен');
             }
             
+            this.cancelGeneration = false;
             const printType = settings.printType || 'thermal';
             const labelSize = settings.labelSize || '58x38.6';
             const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
@@ -334,6 +284,10 @@
                     });
                     
                     for (let i = 0; i < labels.length; i++) {
+                        if (this.cancelGeneration) {
+                            throw new Error('Генерация отменена пользователем');
+                        }
+                        
                         if (i > 0) {
                             pdf.addPage([labelWidth, labelHeight]);
                         }
@@ -378,7 +332,7 @@
                     const offsetY = margin + (usableHeight - gridHeight) / 2;
                     
                     const pdf = new jsPDF({
-                        orientation: orientation,
+                        orientation: 'portrait',
                         unit: 'mm',
                         format: 'a4',
                         compress: true
@@ -386,6 +340,10 @@
                     
                     let pageIndex = 0;
                     for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
+                        if (this.cancelGeneration) {
+                            throw new Error('Генерация отменена пользователем');
+                        }
+                        
                         if (pageIndex > 0) {
                             pdf.addPage('a4');
                         }
@@ -440,7 +398,12 @@
                 }
             } finally {
                 document.body.removeChild(container);
+                this.cancelGeneration = false;
             }
+        },
+        
+        cancel() {
+            this.cancelGeneration = true;
         }
     };
 
@@ -514,6 +477,7 @@
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
             document.getElementById('btn-bulk-print').addEventListener('click', () => this.navigateToPrint());
             
+            // ИСПРАВЛЕНИЕ 4: Кнопка закрытия модального окна
             document.getElementById('modal-close').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
             document.getElementById('btn-cancel-edit').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
             document.getElementById('edit-form').addEventListener('submit', (e) => {
@@ -524,7 +488,12 @@
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
             
-            // Обработчик ориентации
+            // ИСПРАВЛЕНИЕ 4: Кнопка закрытия окна импорта количества
+            document.getElementById('quantity-import-modal-close').addEventListener('click', () => {
+                document.getElementById('quantity-import-modal').classList.add('hidden');
+                this.importQuantityData = null;
+            });
+            
             document.getElementById('print-orientation').addEventListener('change', () => {
                 this.updatePrintPreview();
             });
@@ -847,6 +816,23 @@
             Utils.showToast('Удалено');
         },
         
+        // ИСПРАВЛЕНИЕ 5: Добавлена функция обнуления количества
+        resetQuantitySelected() {
+            if (!confirm('Обнулить количество для всех выбранных этикеток?')) return;
+            
+            this.selectedLabels.forEach(id => {
+                const label = this.labels.find(l => l.id === id);
+                if (label) {
+                    label.quantity = 0;
+                    label.updatedAt = new Date().toISOString();
+                }
+            });
+            
+            this.saveLabels();
+            this.renderLabels();
+            Utils.showToast('Количество обнулено');
+        },
+        
         showQuantityImportModal() {
             document.getElementById('quantity-import-modal').classList.remove('hidden');
         },
@@ -1063,23 +1049,54 @@
                 return;
             }
             
-            const progressToast = document.createElement('div');
-            progressToast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:16px 24px;border-radius:8px;z-index:10000;min-width:250px;';
-            progressToast.innerHTML = '<div style="margin-bottom:8px;">Генерация PDF...</div><div id="pdf-progress-bar" style="height:4px;background:#374151;border-radius:2px;overflow:hidden;"><div id="pdf-progress-fill" style="height:100%;background:#4F46E5;width:0%;transition:width 0.3s;"></div></div><div id="pdf-progress-text" style="margin-top:6px;font-size:12px;color:#9CA3AF;">0 / ' + expanded.length + '</div>';
-            document.body.appendChild(progressToast);
+            // ИСПРАВЛЕНИЕ 3: Создаем модальное окно с кнопкой отмены
+            const progressModal = document.createElement('div');
+            progressModal.id = 'pdf-progress-modal';
+            progressModal.className = 'modal';
+            progressModal.innerHTML = `
+                <div class="modal-content modal-sm">
+                    <div class="modal-header">
+                        <h2>Генерация PDF...</h2>
+                        <button class="modal-close" id="cancel-pdf-generation" style="background:#EF4444;color:white;border:none;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:18px;">✕</button>
+                    </div>
+                    <div style="padding:20px;">
+                        <div style="margin-bottom:12px;">
+                            <div style="height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden;">
+                                <div id="pdf-progress-fill" style="height:100%;background:#4F46E5;width:0%;transition:width 0.3s;"></div>
+                            </div>
+                        </div>
+                        <div id="pdf-progress-text" style="text-align:center;color:#6B7280;">0 / ${expanded.length}</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(progressModal);
+            
+            // Обработчик кнопки отмены
+            document.getElementById('cancel-pdf-generation').addEventListener('click', () => {
+                PDFGenerator.cancel();
+                document.body.removeChild(progressModal);
+                Utils.showToast('Генерация отменена');
+            });
             
             try {
                 await PDFGenerator.generateLabelsPDF(expanded, settings, (done, total) => {
                     const percent = (done / total) * 100;
                     document.getElementById('pdf-progress-fill').style.width = percent + '%';
-                    document.getElementById('pdf-progress-text').textContent = done + ' / ' + total;
+                    document.getElementById('pdf-progress-text').textContent = `${done} / ${total}`;
                 });
-                progressToast.remove();
+                
+                if (progressModal.parentNode) {
+                    document.body.removeChild(progressModal);
+                }
                 Utils.showToast('✅ PDF создан!');
             } catch (error) {
                 console.error('Ошибка:', error);
-                progressToast.remove();
-                alert('Ошибка генерации PDF: ' + error.message);
+                if (progressModal.parentNode) {
+                    document.body.removeChild(progressModal);
+                }
+                if (error.message !== 'Генерация отменена пользователем') {
+                    alert('Ошибка генерации PDF: ' + error.message);
+                }
             }
         },
         
