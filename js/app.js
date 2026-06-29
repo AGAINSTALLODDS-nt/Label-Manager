@@ -141,19 +141,23 @@
     // ==================== ГЕНЕРАЦИЯ PDF ====================
 const PDFGenerator = {
     MM_TO_PX: 3.7795,
-    SAFE_ZONE: 2, // мм отступ от краев (безопасная зона)
+    SAFE_MARGIN: 1.5, // мм отступ от краев
     
     // Измеряет высоту текста с учетом переносов
-    measureTextHeight(text, fontSize, maxWidthMm) {
-        if (!text) return 0;
-        const charsPerLine = Math.floor(maxWidthMm / (fontSize * 0.6 * 0.264583));
+    measureText(text, fontSizePt, maxWidthMm) {
+        if (!text) return { height: 0, lines: 0 };
+        const fontSizeMm = fontSizePt * 0.352778;
+        const lineHeight = fontSizeMm * 1.2;
+        const charsPerMm = fontSizePt * 0.6 * 0.264583;
+        const maxCharsPerLine = Math.floor(maxWidthMm / charsPerMm);
+        
         const words = text.split(' ');
         let lines = 1;
         let currentLine = '';
         
         words.forEach(word => {
             const testLine = currentLine + (currentLine ? ' ' : '') + word;
-            if (testLine.length > charsPerLine && currentLine) {
+            if (testLine.length > maxCharsPerLine && currentLine) {
                 lines++;
                 currentLine = word;
             } else {
@@ -161,7 +165,7 @@ const PDFGenerator = {
             }
         });
         
-        return lines * fontSize * 0.35; // высота строки в мм
+        return { height: lines * lineHeight, lines: lines };
     },
     
     createLabelElement(label, settings, widthMm, heightMm) {
@@ -169,106 +173,143 @@ const PDFGenerator = {
         const barcodeOnly = settings.barcodeOnly || false;
         const noBarcode = settings.noBarcode || false;
         const colorSizeRow = settings.colorSizeRow || false;
+        const align = centerText ? 'center' : 'left';
         
         // Доступная область с учетом безопасных зон
-        const availableWidth = widthMm - (this.SAFE_ZONE * 2);
-        const availableHeight = heightMm - (this.SAFE_ZONE * 2);
-        
-        // Рассчитываем высоту для штрихкода
-        const barcodeHeight = (!barcodeOnly && !noBarcode) ? Math.min(15, availableHeight * 0.35) : 0;
-        const textAvailableHeight = availableHeight - barcodeHeight - 2; // 2мм отступ
+        const availableWidth = widthMm - (this.SAFE_MARGIN * 2);
+        const availableHeight = heightMm - (this.SAFE_MARGIN * 2);
         
         // Собираем все текстовые элементы
-        const textElements = [];
+        const elements = [];
         
         if (!barcodeOnly) {
-            textElements.push({ 
-                text: `Артикул: ${label.article}`, 
-                bold: true, 
-                baseSize: 7 
+            // Артикул (всегда)
+            elements.push({ 
+                type: 'text',
+                text: `Артикул: ${label.article}`,
+                bold: true,
+                baseSize: 7,
+                minSize: 4
             });
             
+            // Название товара
             if (label.name) {
-                textElements.push({ 
-                    text: label.name, 
-                    bold: false, 
-                    baseSize: 6.5 
+                elements.push({ 
+                    type: 'text',
+                    text: label.name,
+                    bold: false,
+                    baseSize: 6.5,
+                    minSize: 4
                 });
             }
             
+            // Цвет и размер
             if (colorSizeRow) {
                 let cs = '';
                 if (label.color) cs += `Цвет: ${label.color}`;
                 if (label.color && label.size) cs += ' / ';
                 if (label.size) cs += `Разм.: ${label.size}`;
                 if (cs) {
-                    textElements.push({ 
-                        text: cs, 
-                        bold: false, 
-                        baseSize: 6 
+                    elements.push({ 
+                        type: 'text',
+                        text: cs,
+                        bold: false,
+                        baseSize: 6,
+                        minSize: 4
                     });
                 }
             } else {
                 if (label.color) {
-                    textElements.push({ 
-                        text: `Цвет: ${label.color}`, 
-                        bold: false, 
-                        baseSize: 6 
+                    elements.push({ 
+                        type: 'text',
+                        text: `Цвет: ${label.color}`,
+                        bold: false,
+                        baseSize: 6,
+                        minSize: 4
                     });
                 }
                 if (label.size) {
-                    textElements.push({ 
-                        text: `Размер: ${label.size}`, 
-                        bold: false, 
-                        baseSize: 6 
+                    elements.push({ 
+                        type: 'text',
+                        text: `Размер: ${label.size}`,
+                        bold: false,
+                        baseSize: 6,
+                        minSize: 4
                     });
                 }
             }
             
+            // Продавец
             if (label.seller) {
-                textElements.push({ 
-                    text: label.seller, 
-                    bold: false, 
-                    baseSize: 6 
+                elements.push({ 
+                    type: 'text',
+                    text: label.seller,
+                    bold: false,
+                    baseSize: 6,
+                    minSize: 4
                 });
             }
             
+            // Бренд
             if (label.brand) {
-                textElements.push({ 
-                    text: `Бренд: ${label.brand}`, 
-                    bold: true, 
-                    baseSize: 6.5 
+                elements.push({ 
+                    type: 'text',
+                    text: `Бренд: ${label.brand}`,
+                    bold: true,
+                    baseSize: 6.5,
+                    minSize: 4
                 });
             }
             
+            // Срок годности
             if (label.expiry) {
-                textElements.push({ 
-                    text: `Срок годности: ${label.expiry}`, 
-                    bold: false, 
-                    baseSize: 5.5 
+                elements.push({ 
+                    type: 'text',
+                    text: `Срок годности: ${label.expiry}`,
+                    bold: false,
+                    baseSize: 5.5,
+                    minSize: 4
                 });
             }
         }
         
-        // Рассчитываем необходимый размер шрифта
-        let fontSize = 7;
-        const minFontSize = 4.5;
-        const maxFontSize = 8;
+        // Рассчитываем высоту для штрихкода
+        let barcodeHeight = 0;
+        let barcodeTextHeight = 0;
+        if (!barcodeOnly && !noBarcode) {
+            barcodeHeight = Math.min(availableHeight * 0.4, 15);
+            barcodeTextHeight = 3;
+        } else if (barcodeOnly) {
+            barcodeHeight = availableHeight * 0.6;
+            barcodeTextHeight = 4;
+        }
         
-        // Пробуем разные размеры пока не найдем подходящий
-        for (let size = maxFontSize; size >= minFontSize; size -= 0.5) {
+        // Доступная высота для текста
+        const textAvailableHeight = availableHeight - barcodeHeight - barcodeTextHeight - 2;
+        
+        // Итеративно подбираем размер шрифта
+        let fontSize = 7;
+        let iterations = 0;
+        
+        while (iterations < 20) {
             let totalHeight = 0;
             let fits = true;
             
-            textElements.forEach(elem => {
-                const lineHeight = this.measureTextHeight(elem.text, size, availableWidth);
-                totalHeight += lineHeight + 0.5; // 0.5мм отступ между элементами
+            elements.forEach(elem => {
+                const measurement = this.measureText(elem.text, fontSize, availableWidth);
+                totalHeight += measurement.height + 0.5; // отступ между строками
             });
             
-            if (totalHeight <= textAvailableHeight) {
-                fontSize = size;
+            if (totalHeight <= textAvailableHeight && fontSize >= 4) {
                 break;
             }
+            
+            fontSize -= 0.5;
+            if (fontSize < 4) {
+                fontSize = 4;
+                break;
+            }
+            iterations++;
         }
         
         // Создаем HTML
@@ -277,11 +318,10 @@ const PDFGenerator = {
         div.style.cssText = `
             width: ${widthMm}mm;
             height: ${heightMm}mm;
-            padding: ${this.SAFE_ZONE}mm;
+            padding: ${this.SAFE_MARGIN}mm;
             box-sizing: border-box;
             font-family: Arial, sans-serif;
-            font-size: ${fontSize}pt;
-            text-align: ${centerText ? 'center' : 'left'};
+            text-align: ${align};
             background: white;
             overflow: hidden;
             display: flex;
@@ -292,27 +332,30 @@ const PDFGenerator = {
         let html = '';
         
         // Штрихкод
-        if (!barcodeOnly && !noBarcode) {
+        if (!noBarcode) {
             const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
-            html += `<div style="margin-bottom:1mm;text-align:center;">
-                <svg id="${bcId}" style="width:100%;height:${barcodeHeight}mm;"></svg>
-                <div style="font-size:${Math.max(4, fontSize * 0.65)}pt;margin-top:0.5mm;word-break:break-all;line-height:1.1;">${Utils.escapeHtml(label.barcode)}</div>
+            const bcWidth = barcodeOnly ? availableWidth * 0.9 : availableWidth;
+            
+            html += `<div style="margin-bottom:${barcodeOnly ? '2mm' : '1mm'};text-align:center;">
+                <svg id="${bcId}" style="width:${bcWidth}mm;height:${barcodeHeight}mm;"></svg>
+                ${barcodeOnly || !barcodeOnly ? `<div style="font-size:${Math.max(4, fontSize * 0.7)}pt;margin-top:0.5mm;word-break:break-all;line-height:1.1;">${Utils.escapeHtml(label.barcode)}</div>` : ''}
             </div>`;
         }
         
-        // Текст с переносами
+        // Текст
         if (!barcodeOnly) {
-            const lineHeightMm = fontSize * 0.35;
+            const lineHeight = fontSize * 0.352778 * 1.2;
             
-            textElements.forEach(elem => {
+            elements.forEach(elem => {
                 const words = elem.text.split(' ');
-                const charsPerLine = Math.floor(availableWidth / (fontSize * 0.6 * 0.264583));
+                const charsPerMm = fontSize * 0.6 * 0.264583;
+                const maxCharsPerLine = Math.floor(availableWidth / charsPerMm);
                 let currentLine = '';
                 const lines = [];
                 
                 words.forEach(word => {
                     const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                    if (testLine.length > charsPerLine && currentLine) {
+                    if (testLine.length > maxCharsPerLine && currentLine) {
                         lines.push(currentLine);
                         currentLine = word;
                     } else {
@@ -322,7 +365,7 @@ const PDFGenerator = {
                 if (currentLine) lines.push(currentLine);
                 
                 lines.forEach(line => {
-                    html += `<div style="font-size:${fontSize}pt;line-height:${lineHeightMm}mm;margin:0.3mm 0;font-weight:${elem.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(line)}</div>`;
+                    html += `<div style="font-size:${fontSize}pt;line-height:${lineHeight}mm;margin:0.3mm 0;font-weight:${elem.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(line)}</div>`;
                 });
             });
         }
@@ -339,8 +382,8 @@ const PDFGenerator = {
                         : settings.barcodeFormat;
                     JsBarcode(svg, label.barcode, {
                         format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                        width: 1.2,
-                        height: 35,
+                        width: Math.max(1, fontSize * 0.2),
+                        height: barcodeHeight * 2.5,
                         displayValue: false,
                         margin: 0
                     });
@@ -363,7 +406,6 @@ const PDFGenerator = {
         const printType = settings.printType || 'thermal';
         const labelSize = settings.labelSize || '58x38.6';
         const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-        const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
         const gap = parseInt(settings.gap) || 3;
         
         const container = document.createElement('div');
@@ -373,7 +415,7 @@ const PDFGenerator = {
         try {
             if (printType === 'thermal') {
                 const pdf = new jsPDF({
-                    orientation: orientation,
+                    orientation: labelWidth > labelHeight ? 'landscape' : 'portrait',
                     unit: 'mm',
                     format: [labelWidth, labelHeight],
                     compress: true
@@ -381,7 +423,7 @@ const PDFGenerator = {
                 
                 for (let i = 0; i < labels.length; i++) {
                     if (this.cancelGeneration) {
-                        throw new Error('Генерация отменена пользователем');
+                        throw new Error('Генерация отменена');
                     }
                     
                     if (i > 0) {
@@ -437,7 +479,7 @@ const PDFGenerator = {
                 let pageIndex = 0;
                 for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
                     if (this.cancelGeneration) {
-                        throw new Error('Генерация отменена пользователем');
+                        throw new Error('Генерация отменена');
                     }
                     
                     if (pageIndex > 0) {
