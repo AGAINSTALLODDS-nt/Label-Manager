@@ -2,7 +2,6 @@
 (function() {
     'use strict';
 
-    // ==================== ХРАНИЛИЩЕ ====================
     const Storage = {
         getUsers() { return JSON.parse(localStorage.getItem('lm_users') || '[]'); },
         saveUsers(users) { localStorage.setItem('lm_users', JSON.stringify(users)); },
@@ -19,7 +18,6 @@
         }
     };
 
-    // ==================== УТИЛИТЫ ====================
     const Utils = {
         generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); },
         detectBarcodeFormat(barcode) {
@@ -67,7 +65,6 @@
         }
     };
 
-    // ==================== АВТОРИЗАЦИЯ ====================
     const Auth = {
         init() {
             const currentUser = Storage.getCurrentUser();
@@ -144,91 +141,143 @@
     // ==================== ГЕНЕРАЦИЯ PDF ====================
     const PDFGenerator = {
         MM_TO_PX: 3.7795,
-        cancelGeneration: false,
         
+        // Создаем HTML-элемент этикетки с правильным масштабированием
         createLabelElement(label, settings, widthMm, heightMm) {
             const centerText = settings.centerText !== false;
             const barcodeOnly = settings.barcodeOnly || false;
             const noBarcode = settings.noBarcode || false;
             const colorSizeRow = settings.colorSizeRow || false;
-            const orientation = settings.orientation || 'portrait';
-            
-            // Рассчитываем масштаб элементов относительно базового размера 58x38.6
-            const baseWidth = 58;
-            const baseHeight = 38.6;
-            const scale = Math.min(widthMm / baseWidth, heightMm / baseHeight);
-            const fontSize = Math.max(6, parseInt(settings.textSize) || 8) * scale;
+            const align = centerText ? 'center' : 'left';
             
             const div = document.createElement('div');
             div.className = 'pdf-label';
-            
-            // Поворачиваем если альбомная ориентация
-            const isLandscape = orientation === 'landscape';
             div.style.cssText = `
                 width: ${widthMm}mm;
                 height: ${heightMm}mm;
-                padding: ${2 * scale}mm;
+                padding: 2mm;
                 box-sizing: border-box;
                 font-family: Arial, sans-serif;
-                font-size: ${fontSize}pt;
-                text-align: ${centerText ? 'center' : 'left'};
+                text-align: ${align};
                 background: white;
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
-                justify-content: flex-start;
-                position: relative;
-                transform: ${isLandscape ? 'rotate(90deg) translateX(100%)' : 'none'};
-                transform-origin: top left;
             `;
             
-            let html = '';
-            
-            // Штрихкод с увеличенными отступами
-            if (!barcodeOnly && !noBarcode) {
-                const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
-                const bcHeight = Math.min(15 * scale, heightMm * 0.35);
-                html += `<div style="margin-bottom:${1.5 * scale}mm;text-align:center;height:${bcHeight}mm;">
-                    <svg id="${bcId}" style="width:100%;height:${bcHeight}mm;"></svg>
-                    <div style="font-size:${fontSize * 0.7}pt;margin-top:${0.5 * scale}mm;word-break:break-all;line-height:1.2;">${Utils.escapeHtml(label.barcode)}</div>
-                </div>`;
-            }
+            // Собираем все текстовые строки
+            const textLines = [];
             
             if (!barcodeOnly) {
-                // Артикул
-                html += `<div style="font-weight:bold;margin-bottom:${0.5 * scale}mm;">Артикул: ${Utils.escapeHtml(label.article)}</div>`;
+                textLines.push({ text: `Артикул: ${label.article}`, bold: true, size: 7 });
                 
-                // Название
                 if (label.name) {
-                    html += `<div style="margin-bottom:${0.5 * scale}mm;">${Utils.escapeHtml(label.name)}</div>`;
+                    textLines.push({ text: label.name, bold: false, size: 6.5 });
                 }
                 
-                // Цвет и размер
                 if (colorSizeRow) {
                     let cs = '';
                     if (label.color) cs += `Цвет: ${label.color}`;
                     if (label.color && label.size) cs += ' / ';
                     if (label.size) cs += `Разм.: ${label.size}`;
-                    if (cs) html += `<div style="margin-bottom:${0.5 * scale}mm;">${cs}</div>`;
+                    if (cs) textLines.push({ text: cs, bold: false, size: 6 });
                 } else {
-                    if (label.color) html += `<div style="margin-bottom:${0.5 * scale}mm;">Цвет: ${Utils.escapeHtml(label.color)}</div>`;
-                    if (label.size) html += `<div style="margin-bottom:${0.5 * scale}mm;">Размер: ${Utils.escapeHtml(label.size)}</div>`;
+                    if (label.color) textLines.push({ text: `Цвет: ${label.color}`, bold: false, size: 6 });
+                    if (label.size) textLines.push({ text: `Размер: ${label.size}`, bold: false, size: 6 });
                 }
                 
-                // Продавец
                 if (label.seller) {
-                    html += `<div style="margin-bottom:${0.5 * scale}mm;">${Utils.escapeHtml(label.seller)}</div>`;
+                    textLines.push({ text: label.seller, bold: false, size: 6 });
                 }
                 
-                // Бренд
                 if (label.brand) {
-                    html += `<div style="font-weight:bold;margin-bottom:${0.5 * scale}mm;">Бренд: ${Utils.escapeHtml(label.brand)}</div>`;
+                    textLines.push({ text: `Бренд: ${label.brand}`, bold: true, size: 6.5 });
                 }
                 
-                // Срок годности
                 if (label.expiry) {
-                    html += `<div>Срок годности: ${Utils.escapeHtml(label.expiry)}</div>`;
+                    textLines.push({ text: `Срок годности: ${label.expiry}`, bold: false, size: 6 });
                 }
+            }
+            
+            // Рассчитываем оптимальный размер шрифта
+            const maxLineWidth = widthMm - 4; // мм
+            const availableHeight = heightMm - 4; // мм (вычет padding)
+            const barcodeHeight = (!barcodeOnly && !noBarcode) ? 15 : 0;
+            const textAvailableHeight = availableHeight - barcodeHeight;
+            
+            // Находим максимальный размер шрифта чтобы всё поместилось
+            let fontSize = 7;
+            const minFontSize = 4.5;
+            
+            // Пробуем разные размеры шрифта
+            for (let size = fontSize; size >= minFontSize; size -= 0.5) {
+                const lineHeight = size * 0.35;
+                let totalHeight = 0;
+                let fits = true;
+                
+                textLines.forEach(line => {
+                    const charsPerLine = Math.floor(maxLineWidth / (size * 0.6 * 0.264583));
+                    const words = line.text.split(' ');
+                    let currentLine = '';
+                    let lineCount = 0;
+                    
+                    words.forEach(word => {
+                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                        if (testLine.length > charsPerLine && currentLine) {
+                            lineCount++;
+                            currentLine = word;
+                        } else {
+                            currentLine = testLine;
+                        }
+                    });
+                    if (currentLine) lineCount++;
+                    totalHeight += lineCount * lineHeight;
+                });
+                
+                if (totalHeight <= textAvailableHeight) {
+                    fontSize = size;
+                    break;
+                }
+                fits = false;
+            }
+            
+            // Генерируем HTML
+            let html = '';
+            
+            // Штрихкод
+            if (!barcodeOnly && !noBarcode) {
+                const bcId = 'bc_' + label.id + '_' + Math.random().toString(36).substr(2, 5);
+                html += `<div style="margin-bottom:1mm;text-align:center;">
+                    <svg id="${bcId}" style="width:100%;height:14mm;"></svg>
+                    <div style="font-size:5pt;margin-top:0.5mm;word-break:break-all;">${Utils.escapeHtml(label.barcode)}</div>
+                </div>`;
+            }
+            
+            // Текст
+            if (!barcodeOnly) {
+                const lineHeight = fontSize * 0.35;
+                
+                textLines.forEach(line => {
+                    const charsPerLine = Math.floor(maxLineWidth / (fontSize * 0.6 * 0.264583));
+                    const words = line.text.split(' ');
+                    let currentLine = '';
+                    const wrappedLines = [];
+                    
+                    words.forEach(word => {
+                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                        if (testLine.length > charsPerLine && currentLine) {
+                            wrappedLines.push(currentLine);
+                            currentLine = word;
+                        } else {
+                            currentLine = testLine;
+                        }
+                    });
+                    if (currentLine) wrappedLines.push(currentLine);
+                    
+                    wrappedLines.forEach(wLine => {
+                        html += `<div style="font-size:${fontSize}pt;line-height:${lineHeight}mm;margin:0.3mm 0;font-weight:${line.bold ? 'bold' : 'normal'};word-break:break-word;">${Utils.escapeHtml(wLine)}</div>`;
+                    });
+                });
             }
             
             div.innerHTML = html;
@@ -243,8 +292,8 @@
                             : settings.barcodeFormat;
                         JsBarcode(svg, label.barcode, {
                             format: format === 'EAN13' ? 'EAN13' : 'CODE128',
-                            width: 1.2 * scale,
-                            height: 40 * scale,
+                            width: 1.2,
+                            height: 40,
                             displayValue: false,
                             margin: 0
                         });
@@ -263,11 +312,10 @@
                 throw new Error('html2canvas не загружен');
             }
             
-            this.cancelGeneration = false;
             const printType = settings.printType || 'thermal';
             const labelSize = settings.labelSize || '58x38.6';
             const [labelWidth, labelHeight] = labelSize.split('x').map(Number);
-            const orientation = settings.orientation || 'portrait';
+            const orientation = labelWidth > labelHeight ? 'landscape' : 'portrait';
             const gap = parseInt(settings.gap) || 3;
             
             const container = document.createElement('div');
@@ -284,10 +332,6 @@
                     });
                     
                     for (let i = 0; i < labels.length; i++) {
-                        if (this.cancelGeneration) {
-                            throw new Error('Генерация отменена пользователем');
-                        }
-                        
                         if (i > 0) {
                             pdf.addPage([labelWidth, labelHeight]);
                         }
@@ -340,10 +384,6 @@
                     
                     let pageIndex = 0;
                     for (let startIdx = 0; startIdx < labels.length; startIdx += labelsPerPage) {
-                        if (this.cancelGeneration) {
-                            throw new Error('Генерация отменена пользователем');
-                        }
-                        
                         if (pageIndex > 0) {
                             pdf.addPage('a4');
                         }
@@ -398,12 +438,7 @@
                 }
             } finally {
                 document.body.removeChild(container);
-                this.cancelGeneration = false;
             }
-        },
-        
-        cancel() {
-            this.cancelGeneration = true;
         }
     };
 
@@ -472,13 +507,11 @@
                 this.updateBulkActions();
             });
             
-            document.getElementById('btn-bulk-reset-quantity').addEventListener('click', () => this.resetQuantitySelected());
             document.getElementById('btn-bulk-duplicate').addEventListener('click', () => this.duplicateSelected());
             document.getElementById('btn-bulk-delete').addEventListener('click', () => this.deleteSelected());
             document.getElementById('btn-bulk-set-quantity').addEventListener('click', () => this.showQuantityImportModal());
             document.getElementById('btn-bulk-print').addEventListener('click', () => this.navigateToPrint());
             
-            // ИСПРАВЛЕНИЕ 4: Кнопка закрытия модального окна
             document.getElementById('modal-close').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
             document.getElementById('btn-cancel-edit').addEventListener('click', () => document.getElementById('edit-modal').classList.add('hidden'));
             document.getElementById('edit-form').addEventListener('submit', (e) => {
@@ -488,12 +521,6 @@
             
             document.getElementById('btn-back-to-labels').addEventListener('click', () => this.navigate('labels'));
             document.getElementById('btn-print').addEventListener('click', () => this.printLabels());
-            
-            // ИСПРАВЛЕНИЕ 4: Кнопка закрытия окна импорта количества
-            document.getElementById('quantity-import-modal-close').addEventListener('click', () => {
-                document.getElementById('quantity-import-modal').classList.add('hidden');
-                this.importQuantityData = null;
-            });
             
             document.getElementById('print-orientation').addEventListener('change', () => {
                 this.updatePrintPreview();
@@ -576,8 +603,8 @@
                     <td style="font-size:11px"><div>Создана: ${Utils.formatDate(label.createdAt)}</div><div>Изменена: ${Utils.formatDate(label.updatedAt || label.createdAt)}</div></td>
                     <td><div class="action-buttons">
                         <button class="action-btn btn-edit" data-id="${label.id}">✏️</button>
-                        <button class="action-btn btn-duplicate" data-id="${label.id}">📑</button>
-                        <button class="action-btn delete btn-delete" data-id="${label.id}">🗑️</button>
+                        <button class="action-btn btn-duplicate" data-id="${label.id}"></button>
+                        <button class="action-btn delete btn-delete" data-id="${label.id}">️</button>
                     </div></td>
                 `;
                 tbody.appendChild(tr);
@@ -817,23 +844,6 @@
             Utils.showToast('Удалено');
         },
         
-        // ИСПРАВЛЕНИЕ 5: Добавлена функция обнуления количества
-        resetQuantitySelected() {
-            if (!confirm('Обнулить количество для всех выбранных этикеток?')) return;
-            
-            this.selectedLabels.forEach(id => {
-                const label = this.labels.find(l => l.id === id);
-                if (label) {
-                    label.quantity = 0;
-                    label.updatedAt = new Date().toISOString();
-                }
-            });
-            
-            this.saveLabels();
-            this.renderLabels();
-            Utils.showToast('Количество обнулено');
-        },
-        
         showQuantityImportModal() {
             document.getElementById('quantity-import-modal').classList.remove('hidden');
         },
@@ -995,8 +1005,6 @@
                     labelEl.style.top = (y * scale) + 'px';
                     labelEl.style.width = (labelWidth * scale) + 'px';
                     labelEl.style.height = (labelHeight * scale) + 'px';
-                    labelEl.style.fontSize = Math.max(6, parseInt(settings.textSize) * scale * 0.8) + 'pt';
-                    labelEl.style.padding = (2 * scale) + 'px';
                     labelEl.style.overflow = 'hidden';
                     a4Div.appendChild(labelEl);
                 }
@@ -1050,54 +1058,23 @@
                 return;
             }
             
-            // ИСПРАВЛЕНИЕ 3: Создаем модальное окно с кнопкой отмены
-            const progressModal = document.createElement('div');
-            progressModal.id = 'pdf-progress-modal';
-            progressModal.className = 'modal';
-            progressModal.innerHTML = `
-                <div class="modal-content modal-sm">
-                    <div class="modal-header">
-                        <h2>Генерация PDF...</h2>
-                        <button class="modal-close" id="cancel-pdf-generation" style="background:#EF4444;color:white;border:none;width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:18px;">✕</button>
-                    </div>
-                    <div style="padding:20px;">
-                        <div style="margin-bottom:12px;">
-                            <div style="height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden;">
-                                <div id="pdf-progress-fill" style="height:100%;background:#4F46E5;width:0%;transition:width 0.3s;"></div>
-                            </div>
-                        </div>
-                        <div id="pdf-progress-text" style="text-align:center;color:#6B7280;">0 / ${expanded.length}</div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(progressModal);
-            
-            // Обработчик кнопки отмены
-            document.getElementById('cancel-pdf-generation').addEventListener('click', () => {
-                PDFGenerator.cancel();
-                document.body.removeChild(progressModal);
-                Utils.showToast('Генерация отменена');
-            });
+            const progressToast = document.createElement('div');
+            progressToast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#111827;color:white;padding:16px 24px;border-radius:8px;z-index:10000;min-width:250px;';
+            progressToast.innerHTML = '<div style="margin-bottom:8px;">Генерация PDF...</div><div id="pdf-progress-bar" style="height:4px;background:#374151;border-radius:2px;overflow:hidden;"><div id="pdf-progress-fill" style="height:100%;background:#4F46E5;width:0%;transition:width 0.3s;"></div></div><div id="pdf-progress-text" style="margin-top:6px;font-size:12px;color:#9CA3AF;">0 / ' + expanded.length + '</div>';
+            document.body.appendChild(progressToast);
             
             try {
                 await PDFGenerator.generateLabelsPDF(expanded, settings, (done, total) => {
                     const percent = (done / total) * 100;
                     document.getElementById('pdf-progress-fill').style.width = percent + '%';
-                    document.getElementById('pdf-progress-text').textContent = `${done} / ${total}`;
+                    document.getElementById('pdf-progress-text').textContent = done + ' / ' + total;
                 });
-                
-                if (progressModal.parentNode) {
-                    document.body.removeChild(progressModal);
-                }
+                progressToast.remove();
                 Utils.showToast('✅ PDF создан!');
             } catch (error) {
                 console.error('Ошибка:', error);
-                if (progressModal.parentNode) {
-                    document.body.removeChild(progressModal);
-                }
-                if (error.message !== 'Генерация отменена пользователем') {
-                    alert('Ошибка генерации PDF: ' + error.message);
-                }
+                progressToast.remove();
+                alert('Ошибка генерации PDF: ' + error.message);
             }
         },
         
