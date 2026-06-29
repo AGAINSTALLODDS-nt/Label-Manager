@@ -1,4 +1,4 @@
-Приложение доступно по адресу: `[https://againstallodds-nt.github.io/label-manager/](https://againstallodds-nt.github.io/Label-Manager/)`
+Приложение доступно по адресу: [https://againstallodds-nt.github.io/label-manager/](https://againstallodds-nt.github.io/Label-Manager/)
 
 ## Использование
 
