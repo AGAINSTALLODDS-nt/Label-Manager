@@ -353,7 +353,8 @@
             this.currentUser = Storage.getCurrentUser();
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
-            document.getElementById('user-name').textContent = this.currentUser.username;
+            const userNameEl = document.getElementById('user-name');
+            if (userNameEl) userNameEl.textContent = this.currentUser.username;
             this.loadLabels();
             this.loadGroups();
             this.renderGroupsSelector();
@@ -442,7 +443,10 @@
         navigateToPrint() { this.labelsForPrint = Array.from(this.selectedLabels); this.navigate('print'); },
         loadLabels() { this.labels = Storage.getLabels(this.currentUser.id); },
         saveLabels() { Storage.saveLabels(this.currentUser.id, this.labels); this.updateLabelsCount(); },
-        updateLabelsCount() { document.getElementById('labels-count').textContent = this.labels.length; },
+        updateLabelsCount() {
+            const el = document.getElementById('labels-count');
+            if (el) el.textContent = this.labels.length;
+        },
         loadGroups() { this.groups = Storage.getGroups(this.currentUser.id); },
         saveGroups() { Storage.saveGroups(this.currentUser.id, this.groups); },
 
